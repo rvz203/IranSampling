@@ -1,0 +1,375 @@
+{
+  "date": "2026-11-18",
+  "stack": [
+    "Next.js",
+    "Go",
+    "PostgreSQL"
+  ],
+  "isolation": {
+    "database": "sampling_platform_qa_test",
+    "schema": "qa_c646694263d7",
+    "schemaDropped": true,
+    "mainWorkspaceBusinessRecordsModifiedByTests": false
+  },
+  "backend": {
+    "cases": 15,
+    "status": "passed",
+    "tests": [
+      "TestJSONRequiresOneCompleteObject",
+      "TestShiftDatesUseTehranCalendarDay",
+      "TestConcurrentCheckInsRemainExclusive",
+      "TestArrivalLockCoexistsWithForeignKeyReferences",
+      "TestPendingReportFreezesStaffingAndNewCheckIns",
+      "TestCompletedShiftRejectsNewIssues",
+      "TestEvidenceRejectsTruncatedPNG",
+      "TestSessionExpiryAndRoleWriteBoundaries",
+      "TestDemoWorkflowReconciliationPreservesUserRecords",
+      "TestLateCheckoutClosesAnExistingArrival",
+      "TestOversizedShiftTargetIsValidationError",
+      "TestApprovedShiftCannotReopenUrgentIssue",
+      "TestLoginAttemptLimitAppliesConcurrently",
+      "TestGeofenceAndValidation",
+      "TestOperationalWorkflow"
+    ],
+    "vet": "passed",
+    "evidenceLog": ".local/qa/backend-verification-final.log"
+  },
+  "browser": {
+    "cases": 28,
+    "status": "passed",
+    "stats": {
+      "startTime": "2026-11-18T06:18:47.005Z",
+      "duration": 365176.176,
+      "expected": 28,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "results": [
+      {
+        "name": "manual sign-out, rejected password, successful password login and HttpOnly session",
+        "file": "auth.spec.ts",
+        "status": "passed",
+        "durationMs": 15075
+      },
+      {
+        "name": "expired browser session leaves the workspace and stays signed out after reload",
+        "file": "auth.spec.ts",
+        "status": "passed",
+        "durationMs": 6801
+      },
+      {
+        "name": "supported demo role buttons switch roles through the real API",
+        "file": "auth.spec.ts",
+        "status": "passed",
+        "durationMs": 9957
+      },
+      {
+        "name": "a committed form save remains successful if the subsequent workspace refresh fails",
+        "file": "auth.spec.ts",
+        "status": "passed",
+        "durationMs": 5829
+      },
+      {
+        "name": "sampler and supervisor permissions reject unassigned writes and exports",
+        "file": "auth.spec.ts",
+        "status": "passed",
+        "durationMs": 4751
+      },
+      {
+        "name": "dashboard chart ranges, campaign tabs, activity and service links",
+        "file": "interactions.spec.ts",
+        "status": "passed",
+        "durationMs": 6456
+      },
+      {
+        "name": "map city changes, zoom limits, point details and directions",
+        "file": "interactions.spec.ts",
+        "status": "passed",
+        "durationMs": 8682
+      },
+      {
+        "name": "team pagination, profiles, role metrics and table details",
+        "file": "interactions.spec.ts",
+        "status": "passed",
+        "durationMs": 5943
+      },
+      {
+        "name": "attendance date filtering, GPS guide, ledger tabs and record navigation",
+        "file": "interactions.spec.ts",
+        "status": "passed",
+        "durationMs": 14636
+      },
+      {
+        "name": "issue and report details, metric filters and catalog campaign links",
+        "file": "interactions.spec.ts",
+        "status": "passed",
+        "durationMs": 9205
+      },
+      {
+        "name": "complete field lifecycle: staffing, GPS, stock, evidence, issues, report return/resubmit, approval and CSV",
+        "file": "lifecycle.spec.ts",
+        "status": "passed",
+        "durationMs": 55532
+      },
+      {
+        "name": "page /: rendering, artwork, navigation and controls",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 3849
+      },
+      {
+        "name": "page /campaigns: rendering, artwork, navigation and controls",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 4255
+      },
+      {
+        "name": "page /shifts: rendering, artwork, navigation and controls",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 5263
+      },
+      {
+        "name": "page /map: rendering, artwork, navigation and controls",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 3969
+      },
+      {
+        "name": "page /team: rendering, artwork, navigation and controls",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 3775
+      },
+      {
+        "name": "page /attendance: rendering, artwork, navigation and controls",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 3958
+      },
+      {
+        "name": "page /inventory: rendering, artwork, navigation and controls",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 3286
+      },
+      {
+        "name": "page /issues: rendering, artwork, navigation and controls",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 4340
+      },
+      {
+        "name": "page /reports: rendering, artwork, navigation and controls",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 7195
+      },
+      {
+        "name": "page /catalog: rendering, artwork, navigation and controls",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 6716
+      },
+      {
+        "name": "global search, refresh, notifications, help, account and language persistence",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 15366
+      },
+      {
+        "name": "mobile navigation reaches every operational page in Persian",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 20835
+      },
+      {
+        "name": "all five demo roles load real scoped workspace data",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 10021
+      },
+      {
+        "name": "unknown routes return the not-found page",
+        "file": "pages.spec.ts",
+        "status": "passed",
+        "durationMs": 2423
+      },
+      {
+        "name": "catalog, person, campaign, location and shift forms persist through the Go API",
+        "file": "planning.spec.ts",
+        "status": "passed",
+        "durationMs": 29814
+      },
+      {
+        "name": "form validation prevents empty submissions and displays backend errors without losing fields",
+        "file": "planning.spec.ts",
+        "status": "passed",
+        "durationMs": 9013
+      },
+      {
+        "name": "shift form keeps Tehran wall time when the browser uses another timezone",
+        "file": "time.spec.ts",
+        "status": "passed",
+        "durationMs": 65466
+      }
+    ],
+    "browser": "Installed Chrome",
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 1000
+      },
+      {
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "timezones": [
+      "Asia/Tehran",
+      "UTC"
+    ],
+    "languages": [
+      "Persian RTL",
+      "English LTR"
+    ],
+    "fullRunArtifact": ".local/qa/full-platform-browser-results.json",
+    "finalBackendLifecycleRecheck": {
+      "status": "passed",
+      "stats": {
+        "startTime": "2026-11-18T06:37:40.637Z",
+        "duration": 98485.357,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifact": "web/test-results/platform-results.json",
+      "postgresql": {
+        "negative_balances": 0,
+        "multiple_open_attendances": 0,
+        "pending_completed_shifts": 0,
+        "unreconciled_completed_shifts": 0,
+        "approved_qa_workflows": 1,
+        "audit_events": 27
+      },
+      "apiRestartPersistence": {
+        "session_survived": true,
+        "reports": 14,
+        "campaigns": 7,
+        "evidence": 1
+      },
+      "schemaDropped": true
+    }
+  },
+  "typecheck": "passed",
+  "productionBuild": "passed",
+  "postgresql": {
+    "negative_balances": 0,
+    "multiple_open_attendances": 0,
+    "pending_completed_shifts": 0,
+    "unreconciled_completed_shifts": 0,
+    "approved_qa_workflows": 1,
+    "audit_events": 39
+  },
+  "apiRestartPersistence": {
+    "session_survived": true,
+    "evidence": 1,
+    "reports": 14,
+    "campaigns": 9
+  },
+  "publicFrontendWitness": [
+    {
+      "name": "public-catalog-after-build",
+      "evidence": "ev_ccb68909225a3402c05d0129891649b0ac8987bb9b6b3085e681cde12d287a70",
+      "complete": {
+        "status": "complete",
+        "equality_eligible": true,
+        "missing_sections": [],
+        "truncated_sections": []
+      },
+      "steps": [
+        {
+          "id": "scenario_start",
+          "status": "completed",
+          "error": null
+        },
+        {
+          "id": "fresh-demo-boot",
+          "status": "completed",
+          "error": null
+        },
+        {
+          "id": "catalog-list",
+          "status": "completed",
+          "error": null
+        },
+        {
+          "id": "real-table",
+          "status": "completed",
+          "error": null
+        },
+        {
+          "id": "catalog-grid",
+          "status": "completed",
+          "error": null
+        },
+        {
+          "id": "settled",
+          "status": "completed",
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "public-mobile-shift-after-build",
+      "evidence": "ev_ec82f59799f998a3aabee09b70212e00b8d44e04cb95cfb96e73a90d8103e382",
+      "complete": {
+        "status": "complete",
+        "equality_eligible": true,
+        "missing_sections": [],
+        "truncated_sections": []
+      },
+      "steps": [
+        {
+          "id": "scenario_start",
+          "status": "completed",
+          "error": null
+        },
+        {
+          "id": "fresh-demo-boot",
+          "status": "completed",
+          "error": null
+        },
+        {
+          "id": "recorded-day",
+          "status": "completed",
+          "error": null
+        },
+        {
+          "id": "day-selected",
+          "status": "completed",
+          "error": null
+        },
+        {
+          "id": "shift-detail",
+          "status": "completed",
+          "error": null
+        },
+        {
+          "id": "drawer",
+          "status": "completed",
+          "error": null
+        }
+      ]
+    }
+  ],
+  "activation": {
+    "sourceChangesSaved": true,
+    "isolatedFixedBackendVerified": true,
+    "existingApiRestarted": false,
+    "blockedAction": "Replace and restart the existing local API",
+    "reviewResponse": "blocked by policy"
+  }
+}

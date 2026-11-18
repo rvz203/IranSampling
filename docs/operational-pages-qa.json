@@ -1,0 +1,245 @@
+{
+  "date": "2026-11-18",
+  "tool": "Installed REA capture_browser_scenario",
+  "desktopViewport": {
+    "width": 1440,
+    "height": 1100
+  },
+  "mobileViewport": {
+    "width": 390,
+    "height": 844
+  },
+  "results": [
+    {
+      "name": "campaigns",
+      "evidence": "ev_c899cd5adbd6ac636c02480ac434c7f65973120ed252feec08c7c51639ca5f90",
+      "status": "complete",
+      "completedActions": 2,
+      "failedSteps": []
+    },
+    {
+      "name": "shifts",
+      "evidence": "ev_1c883b8f0e5cc6eda0011ef5bd7aab20a32eca782d81691b67ed38615f343a6b",
+      "status": "complete",
+      "completedActions": 2,
+      "failedSteps": []
+    },
+    {
+      "name": "map",
+      "evidence": "ev_bd24f10eb6e3afbb5225655272d8e1a793c7f83fae616c3b5d460aef4d99b033",
+      "status": "complete",
+      "completedActions": 2,
+      "failedSteps": []
+    },
+    {
+      "name": "team",
+      "evidence": "ev_41ff37e2b29b64e1d949704efe4fab134e382b869643bb7de25a8f092471e870",
+      "status": "complete",
+      "completedActions": 2,
+      "failedSteps": []
+    },
+    {
+      "name": "attendance",
+      "evidence": "ev_6263073f009c8875f4d700aa79eb20ebf6e314204d56e23878f350d31b08d8c8",
+      "status": "complete",
+      "completedActions": 2,
+      "failedSteps": []
+    },
+    {
+      "name": "inventory",
+      "evidence": "ev_5ab4292acb68907deb81290d763bc3a0733b0cfd487172abc6d41276f3dfda28",
+      "status": "complete",
+      "completedActions": 2,
+      "failedSteps": []
+    },
+    {
+      "name": "issues",
+      "evidence": "ev_039415b63d17fb0738ade8336b554eba5fb687aa88c5d512f0f37961f7890e8a",
+      "status": "complete",
+      "completedActions": 2,
+      "failedSteps": []
+    },
+    {
+      "name": "reports",
+      "evidence": "ev_e41f1dab61d74321340e13e9df274c158f9eaa26624856ca9298c42414620a23",
+      "status": "complete",
+      "completedActions": 2,
+      "failedSteps": []
+    },
+    {
+      "name": "catalog",
+      "evidence": "ev_c4f063bc7014c5880b3e4ed92eeacf778299983bcb359a93e3aa503d154798a1",
+      "status": "complete",
+      "completedActions": 2,
+      "failedSteps": []
+    },
+    {
+      "name": "campaigns-actions",
+      "evidence": "ev_8f2a4867a8849ff73edeed48b4260f29afe4481e555f84febafe5d8b66398f77",
+      "status": "complete",
+      "completedActions": 6,
+      "failedSteps": []
+    },
+    {
+      "name": "shifts-actions",
+      "evidence": "ev_a41be17edb50d53efa362535033d22dd40e85069a05a2068c0a4d7628d13db0e",
+      "status": "complete",
+      "completedActions": 7,
+      "failedSteps": []
+    },
+    {
+      "name": "team-actions",
+      "evidence": "ev_8ba0cb143beeac6bd7dd7c06264612af61d94b31c283139768e947f3b8e89d82",
+      "status": "complete",
+      "completedActions": 6,
+      "failedSteps": []
+    },
+    {
+      "name": "map-actions",
+      "evidence": "ev_fbd6f84fc753a192a66df23d7f0cce0900fc5a12a5a5782f189521a1ec1352b0",
+      "status": "complete",
+      "completedActions": 6,
+      "failedSteps": []
+    },
+    {
+      "name": "attendance-actions",
+      "evidence": "ev_43006bf0d714c80140274cb8f423bc114fca55cc105b47fcc92da50302276630",
+      "status": "complete",
+      "completedActions": 6,
+      "failedSteps": []
+    },
+    {
+      "name": "inventory-actions",
+      "evidence": "ev_bccfb94bcb867ecd28f8e6dbede7f5aa090b444fc869727427415f53d83a416f",
+      "status": "complete",
+      "completedActions": 5,
+      "failedSteps": []
+    },
+    {
+      "name": "issues-actions",
+      "evidence": "ev_3e6a72a7a04c8e7bac633980141f73bd98f663b8df69f478de53caf518407885",
+      "status": "complete",
+      "completedActions": 8,
+      "failedSteps": []
+    },
+    {
+      "name": "reports-actions",
+      "evidence": "ev_895e657695254f2f39f2a1dda7019d1a4253f36a31bc4f7d83c73a97c99d0cc8",
+      "status": "complete",
+      "completedActions": 6,
+      "failedSteps": []
+    },
+    {
+      "name": "catalog-actions",
+      "evidence": "ev_4b6728728d4fff981d48569ef24ee22c5779f6f38723996fd8da09b54532a7bc",
+      "status": "complete",
+      "completedActions": 7,
+      "failedSteps": []
+    },
+    {
+      "name": "campaigns-mobile",
+      "evidence": "ev_7bc42b3e786820c662b7dde09098d4289977c79ae04a7d654713325fab85b678",
+      "status": "complete",
+      "completedActions": 4,
+      "failedSteps": []
+    },
+    {
+      "name": "shifts-mobile",
+      "evidence": "ev_0525a8b791add7bedd572dc46cadec35899cbf1628282b072c9860566c305d5c",
+      "status": "complete",
+      "completedActions": 4,
+      "failedSteps": []
+    },
+    {
+      "name": "map-mobile",
+      "evidence": "ev_ee83512d3eae0370c710f7c8341327cce63fa3303c025eb87ae8c702802f671b",
+      "status": "complete",
+      "completedActions": 4,
+      "failedSteps": []
+    },
+    {
+      "name": "team-mobile",
+      "evidence": "ev_c9ce2060a906bb3bde70b8d8250aa38ac9428d6145940d8bc29a56198a604274",
+      "status": "complete",
+      "completedActions": 4,
+      "failedSteps": []
+    },
+    {
+      "name": "attendance-mobile",
+      "evidence": "ev_7cc5fa218a596627e561795375f5133e8e14e1c69a926c63aa01771320362a92",
+      "status": "complete",
+      "completedActions": 4,
+      "failedSteps": []
+    },
+    {
+      "name": "inventory-mobile",
+      "evidence": "ev_ede711eb9d2e5b0b852296557a4bd1003d97fba63376ff75ee68222ee2a76098",
+      "status": "complete",
+      "completedActions": 4,
+      "failedSteps": []
+    },
+    {
+      "name": "issues-mobile",
+      "evidence": "ev_c6a1586cc7e0aa8ca35b36a93a17c1e0060cc864f6c415402efa5779d1171adb",
+      "status": "complete",
+      "completedActions": 4,
+      "failedSteps": []
+    },
+    {
+      "name": "reports-mobile",
+      "evidence": "ev_6c0750a709902fc8eaf577b8eb9bd8e8b797dff5027f7377c4392747667d1abc",
+      "status": "complete",
+      "completedActions": 4,
+      "failedSteps": []
+    },
+    {
+      "name": "catalog-mobile",
+      "evidence": "ev_9f838eba21ebe8f79453a6c732edd2086753ddf40e32a09b0ffd409563f60bbb",
+      "status": "complete",
+      "completedActions": 4,
+      "failedSteps": []
+    },
+    {
+      "name": "team-english",
+      "evidence": "ev_f810ad549937fc4432df7e5eff335b7ed0813edef8ad5a79a4dd32e671cf07e9",
+      "status": "complete",
+      "completedActions": 9,
+      "failedSteps": []
+    },
+    {
+      "name": "catalog-english",
+      "evidence": "ev_3281476f926c2cb27a396498a4ca4bb8d96f21365f99c534cc721e0356c3b95e",
+      "status": "complete",
+      "completedActions": 7,
+      "failedSteps": []
+    },
+    {
+      "name": "issues-english-mobile",
+      "evidence": "ev_b2c5c1bb8724309bc4720f18411f8f381c2e73dae2bdd8c0901c84e3b68bbe52",
+      "status": "complete",
+      "completedActions": 8,
+      "failedSteps": []
+    },
+    {
+      "name": "shifts-english-mobile",
+      "evidence": "ev_377b304440091450e8ead6631fda0f2a4ec99f69cb3d8c89901b511f68ef429b",
+      "status": "complete",
+      "completedActions": 7,
+      "failedSteps": []
+    },
+    {
+      "name": "campaign-search",
+      "evidence": "ev_46f97508f5c4fe0cd50710b78ba388fc6be9ab5adf9d95e3533f96e437df4144",
+      "status": "complete",
+      "completedActions": 7,
+      "failedSteps": []
+    },
+    {
+      "name": "team-english-final",
+      "evidence": "ev_4a701c837949a7ee3b0d37a506b1dbc3b72c9d3f4d5afe55533b7bb7bd6e9380",
+      "status": "complete",
+      "completedActions": 6,
+      "failedSteps": []
+    }
+  ]
+}

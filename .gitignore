@@ -1,0 +1,18 @@
+node_modules/
+.next/
+.next-e2e/
+test-results/
+playwright-report/
+out/
+.local/
+.env
+.env.local
+*.log
+*.exe
+coverage/
+web/tsconfig.tsbuildinfo
+backend/uploads/
+
+# Local proposal and reference capture
+/FaraCode_Sampling_Operations_Proposal.pdf
+/docs/uber-reference-evidence.json

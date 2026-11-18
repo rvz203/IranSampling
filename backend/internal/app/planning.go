@@ -1,0 +1,302 @@
+package app
+
+import (
+	"net/http"
+	"net/mail"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"golang.org/x/crypto/bcrypt"
+)
+
+func (s *Server) createCampaign(w http.ResponseWriter, r *http.Request) error {
+	p := current(r)
+	if !isPlanner(p) {
+		return forbidden()
+	}
+	var b struct {
+		Name        string `json:"name"`
+		BrandID     string `json:"brand_id"`
+		ProductID   string `json:"product_id"`
+		Status      string `json:"status"`
+		StartDate   string `json:"start_date"`
+		EndDate     string `json:"end_date"`
+		Target      int    `json:"target"`
+		Description string `json:"description"`
+	}
+	if err := readJSON(w, r, &b); err != nil {
+		return err
+	}
+	b.Name = strings.TrimSpace(b.Name)
+	if len([]rune(b.Name)) < 3 || len([]rune(b.Name)) > 160 || b.Target < 1 || b.Target > 100000000 {
+		return bad("نام کمپین و هدف معتبر وارد کنید / Enter a campaign name and a valid target")
+	}
+	start, e1 := time.Parse("2006-01-02", b.StartDate)
+	end, e2 := time.Parse("2006-01-02", b.EndDate)
+	if e1 != nil || e2 != nil || end.Before(start) {
+		return bad("بازه زمانی معتبر نیست / Invalid date range")
+	}
+	if b.Status == "" {
+		b.Status = "scheduled"
+	}
+	if b.Status != "scheduled" && b.Status != "draft" && b.Status != "active" {
+		return bad("Invalid initial status")
+	}
+	cid := id("campaign")
+	err := s.transaction(r, func(tx pgx.Tx) error {
+		var compatible bool
+		if err := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM products WHERE id=$1 AND brand_id=$2)", b.ProductID, b.BrandID).Scan(&compatible); err != nil {
+			return err
+		}
+		if !compatible {
+			return bad("محصول باید متعلق به برند انتخابی باشد / Product must belong to the selected brand")
+		}
+		_, err := tx.Exec(r.Context(), "INSERT INTO campaigns(id,name,brand_id,product_id,status,start_date,end_date,target,description,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", cid, b.Name, b.BrandID, b.ProductID, b.Status, start, end, b.Target, b.Description, p.ID)
+		if err != nil {
+			return err
+		}
+		return audit(r.Context(), tx, p, "campaign_create", "campaign", cid, "کمپین «"+b.Name+"» ایجاد شد")
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 201, map[string]string{"id": cid})
+	return nil
+}
+func (s *Server) updateCampaign(w http.ResponseWriter, r *http.Request) error {
+	p := current(r)
+	if !isPlanner(p) {
+		return forbidden()
+	}
+	var b struct {
+		Status string `json:"status"`
+	}
+	if err := readJSON(w, r, &b); err != nil {
+		return err
+	}
+	valid := map[string]bool{"active": true, "paused": true, "completed": true, "scheduled": true, "draft": true}
+	if !valid[b.Status] {
+		return bad("Invalid campaign status")
+	}
+	err := s.transaction(r, func(tx pgx.Tx) error {
+		var name string
+		if err := tx.QueryRow(r.Context(), "UPDATE campaigns SET status=$1 WHERE id=$2 RETURNING name", b.Status, r.PathValue("id")).Scan(&name); err != nil {
+			return err
+		}
+		return audit(r.Context(), tx, p, "campaign_update", "campaign", r.PathValue("id"), "وضعیت کمپین «"+name+"» تغییر کرد")
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+	return nil
+}
+func (s *Server) createLocation(w http.ResponseWriter, r *http.Request) error {
+	p := current(r)
+	if !isPlanner(p) {
+		return forbidden()
+	}
+	var b struct {
+		Name, City, Address string
+		Latitude, Longitude float64
+		Radius              int
+	}
+	if err := readJSON(w, r, &b); err != nil {
+		return err
+	}
+	if len([]rune(strings.TrimSpace(b.Name))) < 2 || b.City == "" || !validCoordinates(b.Latitude, b.Longitude) || b.Radius < 50 || b.Radius > 5000 {
+		return bad("نام، شهر، مختصات و شعاع ۵۰ تا ۵۰۰۰ متر را بررسی کنید / Check location fields")
+	}
+	lid := id("location")
+	err := s.transaction(r, func(tx pgx.Tx) error {
+		_, err := tx.Exec(r.Context(), "INSERT INTO locations(id,name,city,address,latitude,longitude,radius) VALUES($1,$2,$3,$4,$5,$6,$7)", lid, b.Name, b.City, b.Address, b.Latitude, b.Longitude, b.Radius)
+		if err != nil {
+			return err
+		}
+		return audit(r.Context(), tx, p, "location_create", "location", lid, "نقطه «"+b.Name+"» اضافه شد")
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 201, map[string]string{"id": lid})
+	return nil
+}
+func (s *Server) createShift(w http.ResponseWriter, r *http.Request) error {
+	p := current(r)
+	if !isPlanner(p) {
+		return forbidden()
+	}
+	var b struct {
+		CampaignID    string    `json:"campaign_id"`
+		LocationID    string    `json:"location_id"`
+		SupervisorID  string    `json:"supervisor_id"`
+		StartsAt      time.Time `json:"starts_at"`
+		EndsAt        time.Time `json:"ends_at"`
+		Target        int       `json:"target"`
+		RequiredStaff int       `json:"required_staff"`
+		Instructions  string    `json:"instructions"`
+	}
+	if err := readJSON(w, r, &b); err != nil {
+		return err
+	}
+	if b.StartsAt.IsZero() || !b.EndsAt.After(b.StartsAt) || b.EndsAt.Sub(b.StartsAt) > 24*time.Hour || b.Target < 1 || b.Target > 100000000 || b.RequiredStaff < 1 || b.RequiredStaff > 100 {
+		return bad("زمان، هدف و تعداد نیروی شیفت را بررسی کنید / Invalid shift schedule")
+	}
+	sid := id("shift")
+	err := s.transaction(r, func(tx pgx.Tx) error {
+		var ok bool
+		if err := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM people WHERE id=$1 AND active AND role IN('admin','manager','coordinator','supervisor'))", b.SupervisorID).Scan(&ok); err != nil {
+			return err
+		}
+		if !ok {
+			return bad("سرپرست معتبر انتخاب کنید / Select an active supervisor")
+		}
+		var valid bool
+		if err := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=$1 AND status NOT IN('completed','paused') AND ($2::timestamptz AT TIME ZONE 'Asia/Tehran')::date>=start_date AND ($3::timestamptz AT TIME ZONE 'Asia/Tehran')::date<=end_date)", b.CampaignID, b.StartsAt, b.EndsAt).Scan(&valid); err != nil {
+			return err
+		}
+		if !valid {
+			return bad("شیفت باید در بازه کمپین فعال یا برنامه‌ریزی‌شده باشد / Shift must fall within the campaign dates")
+		}
+		_, err := tx.Exec(r.Context(), "INSERT INTO shifts(id,campaign_id,location_id,supervisor_id,starts_at,ends_at,target,required_staff,instructions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", sid, b.CampaignID, b.LocationID, b.SupervisorID, b.StartsAt, b.EndsAt, b.Target, b.RequiredStaff, b.Instructions)
+		if err != nil {
+			return err
+		}
+		return audit(r.Context(), tx, p, "shift_create", "shift", sid, "شیفت جدید برنامه‌ریزی شد")
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 201, map[string]string{"id": sid})
+	return nil
+}
+func (s *Server) assignPerson(w http.ResponseWriter, r *http.Request) error {
+	p := current(r)
+	if !isPlanner(p) {
+		return forbidden()
+	}
+	var b struct {
+		PersonID string `json:"person_id"`
+	}
+	if err := readJSON(w, r, &b); err != nil {
+		return err
+	}
+	sid := r.PathValue("id")
+	err := s.transaction(r, func(tx pgx.Tx) error {
+		var name string
+		if err := tx.QueryRow(r.Context(), "SELECT name FROM people WHERE id=$1 AND active AND role='sampler' FOR UPDATE", b.PersonID).Scan(&name); err != nil {
+			return err
+		}
+		var status string
+		var capacity int
+		if err := tx.QueryRow(r.Context(), "SELECT status,required_staff FROM shifts WHERE id=$1 FOR UPDATE", sid).Scan(&status, &capacity); err != nil {
+			return err
+		}
+		if status == "completed" {
+			return bad("شیفت پایان یافته است / Shift is completed")
+		}
+		if err := checkReportLock(r, tx, sid); err != nil {
+			return err
+		}
+		var count int
+		if err := tx.QueryRow(r.Context(), "SELECT count(*) FROM assignments WHERE shift_id=$1", sid).Scan(&count); err != nil {
+			return err
+		}
+		if count >= capacity {
+			return bad("ظرفیت شیفت تکمیل است / Shift is fully staffed")
+		}
+		var overlap bool
+		if err := tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM assignments a JOIN shifts s ON s.id=a.shift_id JOIN shifts target ON target.id=$2 WHERE a.person_id=$1 AND s.status!='completed' AND s.starts_at<target.ends_at AND s.ends_at>target.starts_at)`, b.PersonID, sid).Scan(&overlap); err != nil {
+			return err
+		}
+		if overlap {
+			return bad("این نیرو در این بازه شیفت دیگری دارد / This person has an overlapping shift")
+		}
+		if _, err := tx.Exec(r.Context(), "INSERT INTO assignments(shift_id,person_id) VALUES($1,$2)", sid, b.PersonID); err != nil {
+			return err
+		}
+		return audit(r.Context(), tx, p, "assignment", "shift", sid, name+" به شیفت تخصیص یافت")
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 201, map[string]bool{"ok": true})
+	return nil
+}
+func (s *Server) createPerson(w http.ResponseWriter, r *http.Request) error {
+	p := current(r)
+	if p.Role != "admin" && p.Role != "manager" {
+		return forbidden()
+	}
+	var b struct{ Name, Email, Role, City, Phone, Password string }
+	if err := readJSON(w, r, &b); err != nil {
+		return err
+	}
+	if _, err := mail.ParseAddress(b.Email); err != nil || len([]rune(b.Name)) < 2 || len(b.Password) < 12 || len(b.Password) > 72 {
+		return bad("نام، ایمیل و رمز حداقل ۱۲ کاراکتری لازم است / A name, email and 12-character password are required")
+	}
+	roles := map[string]bool{"admin": true, "manager": true, "coordinator": true, "supervisor": true, "sampler": true}
+	if !roles[b.Role] || b.Role == "admin" && p.Role != "admin" {
+		return forbidden()
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(b.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	pid := id("person")
+	err = s.transaction(r, func(tx pgx.Tx) error {
+		_, err := tx.Exec(r.Context(), "INSERT INTO people(id,name,email,password_hash,role,city,phone) VALUES($1,$2,$3,$4,$5,$6,$7)", pid, b.Name, strings.ToLower(strings.TrimSpace(b.Email)), string(hash), b.Role, b.City, b.Phone)
+		if err != nil {
+			return err
+		}
+		return audit(r.Context(), tx, p, "person_create", "person", pid, "همکار «"+b.Name+"» اضافه شد")
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 201, map[string]string{"id": pid})
+	return nil
+}
+func (s *Server) createCatalog(w http.ResponseWriter, r *http.Request) error {
+	p := current(r)
+	if !isPlanner(p) {
+		return forbidden()
+	}
+	var b struct{ Kind, Name, ParentID, Color, Unit string }
+	if err := readJSON(w, r, &b); err != nil {
+		return err
+	}
+	if len([]rune(strings.TrimSpace(b.Name))) < 2 {
+		return bad("نام معتبر وارد کنید / Enter a name")
+	}
+	cid := id(b.Kind)
+	err := s.transaction(r, func(tx pgx.Tx) error {
+		var err error
+		switch b.Kind {
+		case "customer":
+			_, err = tx.Exec(r.Context(), "INSERT INTO customers(id,name) VALUES($1,$2)", cid, b.Name)
+		case "brand":
+			if b.Color == "" {
+				b.Color = "teal"
+			}
+			_, err = tx.Exec(r.Context(), "INSERT INTO brands(id,name,customer_id,color) VALUES($1,$2,$3,$4)", cid, b.Name, b.ParentID, b.Color)
+		case "product":
+			if b.Unit == "" {
+				b.Unit = "نمونه"
+			}
+			_, err = tx.Exec(r.Context(), "INSERT INTO products(id,name,brand_id,unit) VALUES($1,$2,$3,$4)", cid, b.Name, b.ParentID, b.Unit)
+		default:
+			return bad("Invalid catalog type")
+		}
+		if err != nil {
+			return err
+		}
+		return audit(r.Context(), tx, p, "catalog_create", b.Kind, cid, "«"+b.Name+"» به اطلاعات پایه اضافه شد")
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 201, map[string]string{"id": cid})
+	return nil
+}
