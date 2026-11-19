@@ -31,6 +31,7 @@ The stock balance is `initial + added - distributed - damaged - returned`. It is
 | GET | `/health` | API and database readiness |
 | GET | `/api/config` | Whether the development demo is enabled |
 | POST | `/api/auth/login`, `/api/auth/logout` | Start/end a session |
+| POST | `/api/mobile/auth/login` | Sign in a supervisor or sampler and return a revocable bearer session |
 | POST | `/api/auth/demo` | Development-only demo role session |
 | GET | `/api/auth/me` | Current authenticated person |
 | GET | `/api/workspace` | Scoped typed resources and trend data |
@@ -46,6 +47,10 @@ The stock balance is `initial + added - distributed - damaged - returned`. It is
 | POST | `/api/reports/{id}/review` | Approve or return a report |
 | POST/PATCH | `/api/issues`, `/api/issues/{id}` | Create or update an issue |
 | POST | `/api/people`, `/api/catalog` | Maintain staff and base data |
+| PATCH | `/api/people/{id}/credentials` | Administrator changes username or resets password and revokes sessions |
+| POST | `/api/shifts/{id}/tracking` | Start a location session after explicit consent and attendance |
+| POST | `/api/tracking/{id}/samples`, `/stop` | Replay timestamped samples or stop a location session |
+| GET | `/api/tracking/live` | Latest active location for admin or the shift's supervisor |
 | GET | `/api/reports/export?days=30&city=...` | Scoped UTF-8 CSV |
 
 JSON writes use `Content-Type: application/json` and `X-Requested-With: FaraCode`; photo uploads use multipart with the same request header. Errors use `{ "error": "readable message" }`. SQL parameters carry all user-supplied values. The API does not enable cross-origin access; Next.js exposes it through the same-origin proxy.
@@ -55,6 +60,8 @@ JSON writes use `Content-Type: application/json` and `X-Requested-With: FaraCode
 The default document is Persian RTL. Workspace settings persist language locally. The UI fetches authenticated data, refreshes after every successful mutation and every minute while the page is visible, and displays explicit pending/error states. It does not silently emulate backend success. Browser geolocation supplies measured coordinates and accuracy. Local fonts avoid external font dependencies.
 
 Shift inputs use Asia/Tehran, matching display formatting and backend campaign-day checks. Unauthorized API responses clear the workspace and retain sign-out across reloads; session revisions prevent stale reads from restoring signed-out data. A committed write and its subsequent refresh have separate outcomes: a failed read produces a persistent refresh notice without treating the write as failed. Evidence upload follows the same mutation path.
+
+The Expo field app shares the same shift, evidence and review endpoints. Mobile bearer sessions and web cookies use separate session types. Tokens live in SecureStore on the phone. SQLite holds the shift snapshot and the outbox keyed to the API origin and account. The phone keeps each queued photo file until the server acknowledges it. A photo `client_id` identifies a retry. Location samples are deduplicated by tracking session and 30-second slot. The API displays active sessions only, accepts delayed points captured within that session, and purges location records after seven days. [Field app workflow and configuration](../mobile/README.md)
 
 See [platform verification](platform-verification.md) for the database-backed regression suite and browser harness. Demo startup includes narrowly scoped, idempotent repairs for inconsistent original sample report/attendance records, with an audit entry. User-created records are retained.
 

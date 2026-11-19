@@ -2,6 +2,12 @@
 
 A Persian-first operations workspace built from the six-page FaraCode Sampling Operations Proposal. Next.js, TypeScript and React provide the interface; Go provides the API and operational rules; PostgreSQL stores all records. The interface includes English labels and an LTR layout in workspace settings.
 
+The Android and iOS field app connects samplers and supervisors to the same workspace. It includes username or email sign-in, shift-specific location sharing, a persistent location and photo queue, and the existing field and review workflows. Administrators manage credentials in **People & teams** and view shared locations in **Operations map**. [Field app setup and build instructions](mobile/README.md)
+
+Open a campaign to see its shifts, team conversation, and operational history. Administrators and operations managers can access any campaign. Supervisors and samplers can message campaigns linked to their assigned shifts. Messages and operational events stay in PostgreSQL after a campaign is completed.
+
+The panel and field app use the same self-hosted MapLibre map of Iran. OpenStreetMap vector tiles, fonts, icons and JavaScript are served by the Go API. See [Iran map setup](docs/iran-map.md) for the map data bundle and deployment.
+
 The interface now uses a premium monochrome design, original FaraCode branding and imagery, and responsive operational workspaces. The requested Uber reference was inspected with the installed REA plugin. See [design decisions and visual verification](docs/premium-design.md) and the screenshots in `docs/screenshots`.
 
 All nine operational pages now include dedicated artwork and custom SVG icons, with campaign/location/profile/catalog cards, a shift date agenda, inventory breakdown, issue board and report review cards. See [operational page details, assets and checks](docs/operational-pages.md).

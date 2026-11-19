@@ -7,6 +7,16 @@ out/
 .local/
 .env
 .env.local
+.expo/
+mobile/android/
+mobile/ios/
+mobile/dist/
+mobile/artifacts/
+*.apk
+*.aab
+*.ipa
+*.keystore
+*.jks
 *.log
 *.exe
 coverage/

@@ -33,6 +33,8 @@ import {
 import { CollectionBar, DataTable, PageHeading } from "./collections";
 import { CampaignRows } from "./overview";
 import { OperationsMap } from "./charts";
+import { LiveTeamMap } from "./live-team";
+import { mapLocationUrl } from "./iran-map";
 import { dayKey } from "@/lib/api";
 import {
   CampaignGrid,
@@ -413,7 +415,15 @@ export function MapView() {
   const [q, setQ] = useState("");
   const [layout, setLayout] = useState("grid");
   const [city, setCity] = useState("all");
-  const rows = data.locations.filter(
+  const [campaign, setCampaign] = useState("");
+  const scopedShifts = data.shifts.filter(
+    (shift) => !campaign || shift.campaign_id === campaign,
+  );
+  const pointIds = new Set(scopedShifts.map((shift) => shift.location_id));
+  const locations = data.locations.filter(
+    (location) => !campaign || pointIds.has(location.id),
+  );
+  const rows = locations.filter(
     (l) =>
       (city === "all" || l.city === city) &&
       [l.name, l.city, l.address].some((v) => v.includes(q)),
@@ -443,19 +453,19 @@ export function MapView() {
         items={[
           {
             label: t("نقاط ثبت‌شده", "Saved locations"),
-            value: n(data.locations.length),
+            value: n(locations.length),
             icon: MapPin,
           },
           {
             label: t("شهرهای تحت پوشش", "Cities covered"),
-            value: n(new Set(data.locations.map((l) => l.city)).size),
+            value: n(new Set(locations.map((l) => l.city)).size),
             icon: Navigation,
           },
           {
             label: t("نقاط در حال اجرا", "Active locations"),
             value: n(
               new Set(
-                data.shifts
+                scopedShifts
                   .filter((s) => s.status === "active")
                   .map((s) => s.location_id),
               ).size,
@@ -464,7 +474,27 @@ export function MapView() {
           },
         ]}
       />
-      <OperationsMap expanded />
+      <div className="map-campaign-filter">
+        <Select
+          aria-label={t("کمپین نقشه", "Map campaign")}
+          value={campaign}
+          onChange={(event) => {
+            setCampaign(event.target.value);
+            setCity("all");
+          }}
+        >
+          <option value="">{t("همه کمپین‌ها", "All campaigns")}</option>
+          {data.campaigns.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+      {(data.user.role === "admin" || data.user.role === "supervisor") && (
+        <LiveTeamMap key={data.user.id + ":" + campaign} campaign={campaign} />
+      )}
+      <OperationsMap expanded campaign={campaign} />
       <div className="section-heading compact-heading">
         <h2>{t("نقاط اجرا", "Your activation points")}</h2>
         <span>
@@ -490,7 +520,7 @@ export function MapView() {
             onChange={(e) => setCity(e.target.value)}
           >
             <option value="all">{t("همه شهرها", "All cities")}</option>
-            {Array.from(new Set(data.locations.map((l) => l.city))).map((c) => (
+            {Array.from(new Set(locations.map((l) => l.city))).map((c) => (
               <option key={c}>{c}</option>
             ))}
           </Select>
@@ -529,16 +559,16 @@ export function MapView() {
                   ),
               },
               {
-                label: t("مسیریابی", "Directions"),
+                label: t("نقشهٔ ایران", "Iran map"),
                 render: (l) => (
                   <a
                     className="text-button"
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${l.latitude},${l.longitude}`}
+                    href={mapLocationUrl(l.latitude, l.longitude)}
                     target="_blank"
                     rel="noreferrer"
                   >
                     <Navigation size={15} />
-                    {t("مسیریابی", "Directions")}
+                    {t("باز کردن نقشه", "Open map")}
                   </a>
                 ),
               },

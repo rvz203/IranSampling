@@ -51,7 +51,8 @@ func (s *Server) attendancePosition(r *http.Request, tx pgx.Tx, b geoBody, arriv
 	var start, end time.Time
 	var assigned bool
 	var status string
-	if err := tx.QueryRow(r.Context(), `SELECT l.latitude,l.longitude,l.radius,s.starts_at,s.ends_at,EXISTS(SELECT 1 FROM assignments a WHERE a.shift_id=s.id AND a.person_id=$2),s.status FROM shifts s JOIN locations l ON l.id=s.location_id WHERE s.id=$1 FOR UPDATE OF s`, r.PathValue("id"), current(r).ID).Scan(&lat, &lon, &radius, &start, &end, &assigned, &status); err != nil {
+	p := current(r)
+	if err := tx.QueryRow(r.Context(), `SELECT l.latitude,l.longitude,l.radius,s.starts_at,s.ends_at, CASE WHEN $3='supervisor' THEN s.supervisor_id=$2 WHEN $3='sampler' THEN EXISTS(SELECT 1 FROM assignments a WHERE a.shift_id=s.id AND a.person_id=$2) ELSE false END,s.status FROM shifts s JOIN locations l ON l.id=s.location_id WHERE s.id=$1 FOR UPDATE OF s`, r.PathValue("id"), p.ID, p.Role).Scan(&lat, &lon, &radius, &start, &end, &assigned, &status); err != nil {
 		return err
 	}
 	if !assigned {
@@ -129,6 +130,9 @@ func (s *Server) checkOut(w http.ResponseWriter, r *http.Request) error {
 		}
 		if tag.RowsAffected() == 0 {
 			return bad("ورود فعال برای این شیفت پیدا نشد / No active check-in for this shift")
+		}
+		if _, err = tx.Exec(r.Context(), `UPDATE tracking_sessions t SET stopped_at=LEAST(a.checked_out_at,t.expires_at) FROM attendance a WHERE t.attendance_id=a.id AND a.shift_id=$1 AND a.person_id=$2 AND t.stopped_at IS NULL`, r.PathValue("id"), p.ID); err != nil {
+			return err
 		}
 		return audit(r.Context(), tx, p, "check_out", "shift", r.PathValue("id"), p.Name+" ثبت خروج کرد")
 	})

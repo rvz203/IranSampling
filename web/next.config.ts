@@ -31,6 +31,10 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/api/maps/view",
+        headers: [{ key: "X-Frame-Options", value: "SAMEORIGIN" }],
+      },
     ];
   },
 };

@@ -1,4 +1,5 @@
 "use client";
+import { IranMap } from "./iran-map";
 import { useState } from "react";
 import {
   ArrowDownLeft,
@@ -423,17 +424,36 @@ export function GoalCard() {
   );
 }
 
-export function OperationsMap({ expanded = false }: { expanded?: boolean }) {
+export function OperationsMap({
+  expanded = false,
+  campaign = "",
+}: {
+  expanded?: boolean;
+  campaign?: string;
+}) {
   const { data, t, n, selectShift, open, planner } = useWorkspace();
   const [city, setCity] = useState("تهران");
   const [zoom, setZoom] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
-  const cities = Array.from(new Set(data.locations.map((l) => l.city)));
+  const scope = data.shifts.filter(
+    (shift) => !campaign || shift.campaign_id === campaign,
+  );
+  const points = new Set(scope.map((shift) => shift.location_id));
+  const available = data.locations.filter(
+    (location) => !campaign || points.has(location.id),
+  );
+  const cities = Array.from(new Set(available.map((l) => l.city)));
   const actualCity = cities.includes(city) ? city : cities[0];
-  const locations = data.locations.filter((l) => l.city === actualCity);
-  const shifts = data.shifts.filter(
+  const locations = available.filter((l) => l.city === actualCity);
+  const shifts = scope.filter(
     (s) => s.status !== "completed" && s.city === actualCity,
   );
+  function activate(id: string) {
+    setSelected(id);
+    const shift = shifts.find((item) => item.location_id === id);
+    if (shift) selectShift(shift.id);
+    else open({ kind: "location-detail", id });
+  }
   const bounds = locations.length
     ? {
         minX: Math.min(...locations.map((l) => l.longitude)) - 0.035,
@@ -471,212 +491,231 @@ export function OperationsMap({ expanded = false }: { expanded?: boolean }) {
         }
       />
       <div className="map-canvas">
-        <div className="map-drawing" style={{ transform: `scale(${zoom})` }}>
-          <svg
-            className="city-art"
-            viewBox="0 0 800 380"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <defs>
-              <pattern
-                id="city-grid"
-                width="80"
-                height="65"
-                patternUnits="userSpaceOnUse"
-              >
-                <path
-                  d="M2 0v65M0 2h80"
-                  fill="none"
-                  stroke="#fff"
-                  strokeWidth="8"
-                />
-                <rect
-                  x="11"
-                  y="12"
-                  width="24"
-                  height="16"
-                  rx="3"
-                  fill="#e3e3e3"
-                />
-                <rect
-                  x="43"
-                  y="12"
-                  width="25"
-                  height="16"
-                  rx="3"
-                  fill="#dedede"
-                />
-                <rect
-                  x="11"
-                  y="36"
-                  width="57"
-                  height="18"
-                  rx="3"
-                  fill="#e7e7e7"
-                />
-              </pattern>
-            </defs>
-            <rect width="800" height="380" fill="#f0f0f0" />
-            <rect width="800" height="380" fill="url(#city-grid)" />
-            <path
-              d="M0 28Q70 88 160 30T340 32T510 20T720 39T850 15V0H0Z"
-              fill="#e0e3df"
-            />
-            <path
-              d="M0 16Q80 76 170 17T350 19T530 6T750 25"
-              stroke="#cdd0cb"
-              strokeWidth="1"
-              fill="none"
-            />
-            <path
-              d="M0 8Q80 68 170 9T350 11T530 0T750 17"
-              stroke="#cdd0cb"
-              strokeWidth="1"
-              fill="none"
-            />
-            <path
-              d="M325 80q70-30 100 10t-15 65q-55 25-70-12Z"
-              fill="#dde2dc"
-            />
-            <path d="M600 213q70-25 94 28t-47 75q-48 3-60-36Z" fill="#dde2dc" />
-            <path d="M110 215q-30 20-10 52t68 4l7-43Z" fill="#dde2dc" />
-            <path
-              d="M-20 325C120 330 140 170 300 190S500 290 820 110"
-              stroke="#d3d3d3"
-              strokeWidth="15"
-              fill="none"
-            />
-            <path
-              d="M-20 325C120 330 140 170 300 190S500 290 820 110"
-              stroke="#ffffff"
-              strokeWidth="10"
-              fill="none"
-            />
-            <path
-              d="M-20 140C140 160 260 105 420 145S620 215 830 175"
-              stroke="#d3d3d3"
-              strokeWidth="15"
-              fill="none"
-            />
-            <path
-              d="M-20 140C140 160 260 105 420 145S620 215 830 175"
-              stroke="#ffffff"
-              strokeWidth="10"
-              fill="none"
-            />
-            <path
-              d="M505-30C490 80 535 125 480 225S470 330 440 410"
-              stroke="#d3d3d3"
-              strokeWidth="15"
-              fill="none"
-            />
-            <path
-              d="M505-30C490 80 535 125 480 225S470 330 440 410"
-              stroke="#ffffff"
-              strokeWidth="10"
-              fill="none"
-            />
-            <path
-              d="M205-30C235 70 200 115 240 230S250 300 205 410"
-              stroke="#fff"
-              strokeWidth="9"
-              fill="none"
-            />
-            <path
-              d="M0 292Q160 260 330 298T800 290"
-              stroke="#fff"
-              strokeWidth="9"
-              fill="none"
-            />
-            <path
-              d="M355 0Q370 110 350 180T350 380"
-              stroke="#d2dbe0"
-              strokeWidth="4"
-              fill="none"
-            />
-            <g
-              fill="#737373"
-              fontFamily="Vazirmatn Variable, sans-serif"
-              fontSize="13"
+        {data.map_available ? (
+          <IranMap
+            points={locations.map((location) => ({
+              id: location.id,
+              label: location.name,
+              latitude: location.latitude,
+              longitude: location.longitude,
+            }))}
+            selected={selected}
+            onSelect={activate}
+          />
+        ) : (
+          <>
+            <div
+              className="map-drawing"
+              style={{ transform: `scale(${zoom})` }}
             >
-              <text x="680" y="67">
-                {actualCity === "تهران"
-                  ? t("زعفرانیه", "Zaferaniyeh")
-                  : t("شمال شهر", "North")}
-              </text>
-              <text x="348" y="120">
-                {t("بوستان", "Park")}
-              </text>
-              <text x="260" y="341">
-                {actualCity === "تهران"
-                  ? t("شهرک اکباتان", "Ekbatan")
-                  : t("مرکز شهر", "City centre")}
-              </text>
-              <text x="600" y="283">
-                {t("فضای سبز", "Green space")}
-              </text>
-            </g>
-          </svg>
-          {locations.map((l) => {
-            const shift = shifts.find((s) => s.location_id === l.id);
-            const x =
-              9 +
-              ((l.longitude - bounds.minX) / (bounds.maxX - bounds.minX)) * 82;
-            const y =
-              12 +
-              ((bounds.maxY - l.latitude) / (bounds.maxY - bounds.minY)) * 74;
-            return (
-              <button
-                key={l.id}
-                className={`map-pin ${shift ? "live" : "inactive"} ${selected === l.id ? "selected" : ""}`}
-                style={{ left: `${x}%`, top: `${y}%` }}
-                aria-label={`${l.name} - ${shift ? t("در حال اجرا", "Active") : t("بدون شیفت فعال", "No active shift")}`}
-                onClick={() => {
-                  setSelected(l.id);
-                  if (shift) selectShift(shift.id);
-                  else open({ kind: "location-detail", id: l.id });
-                }}
+              <svg
+                className="city-art"
+                viewBox="0 0 800 380"
+                preserveAspectRatio="none"
+                aria-hidden="true"
               >
-                <span className="pin-dot">
-                  <MapPin size={15} fill="currentColor" strokeWidth={1.6} />
-                </span>
-                <span className="pin-label">
-                  {l.name}
-                  {shift && <i />}
-                </span>
+                <defs>
+                  <pattern
+                    id="city-grid"
+                    width="80"
+                    height="65"
+                    patternUnits="userSpaceOnUse"
+                  >
+                    <path
+                      d="M2 0v65M0 2h80"
+                      fill="none"
+                      stroke="#fff"
+                      strokeWidth="8"
+                    />
+                    <rect
+                      x="11"
+                      y="12"
+                      width="24"
+                      height="16"
+                      rx="3"
+                      fill="#e3e3e3"
+                    />
+                    <rect
+                      x="43"
+                      y="12"
+                      width="25"
+                      height="16"
+                      rx="3"
+                      fill="#dedede"
+                    />
+                    <rect
+                      x="11"
+                      y="36"
+                      width="57"
+                      height="18"
+                      rx="3"
+                      fill="#e7e7e7"
+                    />
+                  </pattern>
+                </defs>
+                <rect width="800" height="380" fill="#f0f0f0" />
+                <rect width="800" height="380" fill="url(#city-grid)" />
+                <path
+                  d="M0 28Q70 88 160 30T340 32T510 20T720 39T850 15V0H0Z"
+                  fill="#e0e3df"
+                />
+                <path
+                  d="M0 16Q80 76 170 17T350 19T530 6T750 25"
+                  stroke="#cdd0cb"
+                  strokeWidth="1"
+                  fill="none"
+                />
+                <path
+                  d="M0 8Q80 68 170 9T350 11T530 0T750 17"
+                  stroke="#cdd0cb"
+                  strokeWidth="1"
+                  fill="none"
+                />
+                <path
+                  d="M325 80q70-30 100 10t-15 65q-55 25-70-12Z"
+                  fill="#dde2dc"
+                />
+                <path
+                  d="M600 213q70-25 94 28t-47 75q-48 3-60-36Z"
+                  fill="#dde2dc"
+                />
+                <path d="M110 215q-30 20-10 52t68 4l7-43Z" fill="#dde2dc" />
+                <path
+                  d="M-20 325C120 330 140 170 300 190S500 290 820 110"
+                  stroke="#d3d3d3"
+                  strokeWidth="15"
+                  fill="none"
+                />
+                <path
+                  d="M-20 325C120 330 140 170 300 190S500 290 820 110"
+                  stroke="#ffffff"
+                  strokeWidth="10"
+                  fill="none"
+                />
+                <path
+                  d="M-20 140C140 160 260 105 420 145S620 215 830 175"
+                  stroke="#d3d3d3"
+                  strokeWidth="15"
+                  fill="none"
+                />
+                <path
+                  d="M-20 140C140 160 260 105 420 145S620 215 830 175"
+                  stroke="#ffffff"
+                  strokeWidth="10"
+                  fill="none"
+                />
+                <path
+                  d="M505-30C490 80 535 125 480 225S470 330 440 410"
+                  stroke="#d3d3d3"
+                  strokeWidth="15"
+                  fill="none"
+                />
+                <path
+                  d="M505-30C490 80 535 125 480 225S470 330 440 410"
+                  stroke="#ffffff"
+                  strokeWidth="10"
+                  fill="none"
+                />
+                <path
+                  d="M205-30C235 70 200 115 240 230S250 300 205 410"
+                  stroke="#fff"
+                  strokeWidth="9"
+                  fill="none"
+                />
+                <path
+                  d="M0 292Q160 260 330 298T800 290"
+                  stroke="#fff"
+                  strokeWidth="9"
+                  fill="none"
+                />
+                <path
+                  d="M355 0Q370 110 350 180T350 380"
+                  stroke="#d2dbe0"
+                  strokeWidth="4"
+                  fill="none"
+                />
+                <g
+                  fill="#737373"
+                  fontFamily="Vazirmatn Variable, sans-serif"
+                  fontSize="13"
+                >
+                  <text x="680" y="67">
+                    {actualCity === "تهران"
+                      ? t("زعفرانیه", "Zaferaniyeh")
+                      : t("شمال شهر", "North")}
+                  </text>
+                  <text x="348" y="120">
+                    {t("بوستان", "Park")}
+                  </text>
+                  <text x="260" y="341">
+                    {actualCity === "تهران"
+                      ? t("شهرک اکباتان", "Ekbatan")
+                      : t("مرکز شهر", "City centre")}
+                  </text>
+                  <text x="600" y="283">
+                    {t("فضای سبز", "Green space")}
+                  </text>
+                </g>
+              </svg>
+              {locations.map((l) => {
+                const shift = shifts.find((s) => s.location_id === l.id);
+                const x =
+                  9 +
+                  ((l.longitude - bounds.minX) / (bounds.maxX - bounds.minX)) *
+                    82;
+                const y =
+                  12 +
+                  ((bounds.maxY - l.latitude) / (bounds.maxY - bounds.minY)) *
+                    74;
+                return (
+                  <button
+                    key={l.id}
+                    className={`map-pin ${shift ? "live" : "inactive"} ${selected === l.id ? "selected" : ""}`}
+                    style={{ left: `${x}%`, top: `${y}%` }}
+                    aria-label={`${l.name} - ${shift ? t("در حال اجرا", "Active") : t("بدون شیفت فعال", "No active shift")}`}
+                    onClick={() => activate(l.id)}
+                  >
+                    <span className="pin-dot">
+                      <MapPin size={15} fill="currentColor" strokeWidth={1.6} />
+                    </span>
+                    <span className="pin-label">
+                      {l.name}
+                      {shift && <i />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="map-controls">
+              <button
+                aria-label={t("بزرگ‌نمایی", "Zoom in")}
+                onClick={() => setZoom((z) => Math.min(2, z + 0.25))}
+                disabled={zoom >= 2}
+              >
+                <Plus size={17} />
               </button>
-            );
-          })}
-        </div>
-        <div className="map-controls">
-          <button
-            aria-label={t("بزرگ‌نمایی", "Zoom in")}
-            onClick={() => setZoom((z) => Math.min(2, z + 0.25))}
-            disabled={zoom >= 2}
-          >
-            <Plus size={17} />
-          </button>
-          <button
-            aria-label={t("کوچک‌نمایی", "Zoom out")}
-            onClick={() => setZoom((z) => Math.max(1, z - 0.25))}
-            disabled={zoom <= 1}
-          >
-            <Minus size={17} />
-          </button>
-        </div>
-        <span className="map-note">
-          {t(
-            "نمای شماتیک · موقعیت واقعی نقاط",
-            "Schematic · actual point coordinates",
-          )}
-        </span>
-        <span className="map-compass">
-          N
-          <svg viewBox="0 0 16 20">
-            <path d="m8 1 6 17-6-4-6 4L8 1Z" fill="#242424" />
-          </svg>
-        </span>
+              <button
+                aria-label={t("کوچک‌نمایی", "Zoom out")}
+                onClick={() => setZoom((z) => Math.max(1, z - 0.25))}
+                disabled={zoom <= 1}
+              >
+                <Minus size={17} />
+              </button>
+            </div>
+            <span className="map-note">
+              {t(
+                "نمای شماتیک · موقعیت واقعی نقاط",
+                "Schematic · actual point coordinates",
+              )}
+            </span>
+            <span className="map-compass">
+              N
+              <svg viewBox="0 0 16 20">
+                <path d="m8 1 6 17-6-4-6 4L8 1Z" fill="#242424" />
+              </svg>
+            </span>
+          </>
+        )}
       </div>
       <div className="map-footer">
         <div>

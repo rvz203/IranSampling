@@ -23,11 +23,15 @@ test("manual sign-out, rejected password, successful password login and HttpOnly
     .getByRole("button", { name: "Sign out", exact: true })
     .click();
   expect((await signedOut).status()).toBe(200);
-  await expect(page.getByLabel("Work email", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Username or email", { exact: true }),
+  ).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel("Work email", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Username or email", { exact: true }),
+  ).toBeVisible();
   await page
-    .getByLabel("Work email", { exact: true })
+    .getByLabel("Username or email", { exact: true })
     .fill("admin@faracode.local");
   await page
     .getByLabel("Password", { exact: true })
@@ -64,10 +68,14 @@ test("expired browser session leaves the workspace and stays signed out after re
   );
   await page.getByRole("button", { name: "Refresh data", exact: true }).click();
   expect((await response).status()).toBe(401);
-  await expect(page.getByLabel("Work email", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Username or email", { exact: true }),
+  ).toBeVisible();
   await expect(page.locator(".main-content")).toHaveCount(0);
   await page.reload();
-  await expect(page.getByLabel("Work email", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Username or email", { exact: true }),
+  ).toBeVisible();
 });
 
 test("supported demo role buttons switch roles through the real API", async ({

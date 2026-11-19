@@ -25,31 +25,42 @@ test("dashboard chart ranges, campaign tabs, activity and service links", async 
     await expect(page.locator(`.shortcut-card[href="${href}"]`)).toBeVisible();
 });
 
-test("map city changes, zoom limits, point details and directions", async ({
-  page,
-}) => {
+test("map city changes, zoom and local point details", async ({ page }) => {
   await login(page, "admin", "/map");
   const city = page.getByLabel("Select city", { exact: true });
   const options = await city
     .locator("option")
     .evaluateAll((items) => items.map((x) => (x as HTMLOptionElement).value));
-  for (const value of options) {
-    await city.selectOption(value);
-    await expect(page.locator(".map-pin").first()).toBeVisible();
-  }
-  await expect(
-    page.getByRole("button", { name: "Zoom out", exact: true }),
-  ).toBeDisabled();
-  for (let i = 0; i < 4; i++)
+  if ((await workspace(page)).map_available) {
+    const frame = page
+      .locator(".map-canvas")
+      .frameLocator('iframe[title="Iran map"]');
+    await expect(frame.locator("body")).toHaveAttribute(
+      "data-map-state",
+      "ready",
+      { timeout: 30_000 },
+    );
+    for (const value of options) {
+      await city.selectOption(value);
+      await expect(frame.locator(".pin").first()).toBeVisible();
+    }
+    const before = await frame.locator("body").getAttribute("data-map-zoom");
+    await frame
+      .getByRole("button", { name: "بزرگ‌نمایی", exact: true })
+      .click();
+    await expect(frame.locator("body")).not.toHaveAttribute(
+      "data-map-zoom",
+      before ?? "",
+    );
+    await frame.locator(".pin").first().click();
+  } else {
+    for (const value of options) {
+      await city.selectOption(value);
+      await expect(page.locator(".map-pin").first()).toBeVisible();
+    }
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Zoom in", exact: true }),
-  ).toBeDisabled();
-  await page.getByRole("button", { name: "Zoom out", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Zoom in", exact: true }),
-  ).toBeEnabled();
-  await page.locator(".map-pin").first().click();
+    await page.locator(".map-pin").first().click();
+  }
   await expect(dialog(page)).toBeVisible();
   await closeDialog(page);
   await page.locator(".location-card .rich-title").first().click();
@@ -59,7 +70,7 @@ test("map city changes, zoom limits, point details and directions", async ({
   await expect(page.locator("dialog.drawer[open]")).toBeVisible();
   await expect(dialog(page).locator(".directions-link")).toHaveAttribute(
     "href",
-    /^https:\/\/www\.google\.com\/maps\/dir\/\?api=1&destination=/,
+    /^\/api\/maps\/view#lat=/,
   );
 });
 

@@ -8,11 +8,13 @@ import {
   FileCheck2,
   FileText,
   Flag,
+  History,
   Info,
   LocateFixed,
   LogIn,
   LogOut,
   MapPin,
+  MessageCircle,
   Navigation,
   Package,
   Plus,
@@ -32,6 +34,8 @@ import {
   Progress,
 } from "./ui";
 import { EvidenceGallery } from "./dialogs";
+import { CampaignHistory, CampaignMessages } from "./campaign-records";
+import { mapLocationUrl } from "./iran-map";
 
 export function ShiftDrawer({
   id,
@@ -54,7 +58,9 @@ export function ShiftDrawer({
         />
       </Dialog>
     );
-  const mine = shift.team.some((p) => p.id === data.user.id);
+  const mine =
+    shift.team.some((p) => p.id === data.user.id) ||
+    (data.user.role === "supervisor" && shift.supervisor_id === data.user.id);
   const attendance = data.attendance.find(
     (a) => a.shift_id === id && a.person_id === data.user.id,
   );
@@ -312,12 +318,12 @@ export function ShiftDrawer({
           </section>
           <a
             className="directions-link"
-            href={`https://www.google.com/maps/dir/?api=1&destination=${shift.latitude},${shift.longitude}`}
+            href={mapLocationUrl(shift.latitude, shift.longitude)}
             target="_blank"
             rel="noreferrer"
           >
             <Navigation size={17} />
-            {t("مسیریابی تا نقطه اجرا", "Get directions to the location")}
+            {t("باز کردن محل اجرا روی نقشه", "Open location on map")}
             <Arrow size={16} />
           </a>
           <section className="detail-section">
@@ -515,6 +521,9 @@ export function CampaignDrawer({
     useWorkspace();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [section, setSection] = useState<"details" | "messages" | "history">(
+    "details",
+  );
   const campaign = data.campaigns.find((c) => c.id === id);
   if (!campaign) return null;
   const shifts = data.shifts.filter((s) => s.campaign_id === id);
@@ -537,116 +546,165 @@ export function CampaignDrawer({
       drawer
       onClose={onClose}
     >
-      <div className={`campaign-detail-brand ${campaign.color}`}>
-        <span>{campaign.brand_name}</span>
-        <Badge value={campaign.status} />
-        <svg viewBox="0 0 150 150" aria-hidden="true">
-          <circle cx="75" cy="75" r="55" />
-          <circle cx="75" cy="75" r="38" />
-          <circle cx="75" cy="75" r="21" />
-          <path d="M75 0v150M0 75h150" />
-        </svg>
+      <div
+        className="campaign-tabs"
+        role="group"
+        aria-label={t("بخش‌های کمپین", "Campaign sections")}
+      >
+        <button
+          type="button"
+          aria-pressed={section === "details"}
+          onClick={() => setSection("details")}
+        >
+          <FileText size={17} />
+          {t("جزئیات", "Details")}
+        </button>
+        <button
+          type="button"
+          aria-pressed={section === "messages"}
+          onClick={() => setSection("messages")}
+        >
+          <MessageCircle size={17} />
+          {t("گفت‌وگو", "Conversation")}
+        </button>
+        <button
+          type="button"
+          aria-pressed={section === "history"}
+          onClick={() => setSection("history")}
+        >
+          <History size={17} />
+          {t("تاریخچه", "History")}
+        </button>
       </div>
-      <div className="campaign-target">
-        <span>{t("توزیع نمونه‌ها", "Samples distributed")}</span>
-        <strong>
-          {n(campaign.distributed)}{" "}
-          <small>
-            {t("از", "of")} {n(campaign.target)}
-          </small>
-        </strong>
-        <Progress value={(campaign.distributed / campaign.target) * 100} />
-        <small>
-          {n(Math.round((campaign.distributed / campaign.target) * 100))}٪{" "}
-          {t("از هدف کمپین محقق شده", "of the campaign target reached")}
-        </small>
-      </div>
-      <div className="details-grid">
-        <div className="info-pair">
-          <span>{t("مشتری", "Client")}</span>
-          <strong>{campaign.customer_name}</strong>
-        </div>
-        <div className="info-pair">
-          <span>{t("نقاط اجرا", "Locations")}</span>
-          <strong>
-            {n(campaign.points)} {t("نقطه", "points")}
-          </strong>
-        </div>
-        <div className="info-pair">
-          <span>{t("شروع کمپین", "Starts")}</span>
-          <strong>{date(campaign.start_date + "T12:00:00")}</strong>
-        </div>
-        <div className="info-pair">
-          <span>{t("پایان کمپین", "Ends")}</span>
-          <strong>{date(campaign.end_date + "T12:00:00")}</strong>
-        </div>
-      </div>
-      <section className="detail-section">
-        <h3>{t("داستان این کمپین", "The campaign brief")}</h3>
-        <p className="prose-copy">
-          {campaign.description ||
-            t("توضیحی ثبت نشده است.", "No brief added yet.")}
-        </p>
-      </section>
-      {planner && (
-        <label className="form-field">
-          <span>{t("وضعیت کمپین", "Campaign status")}</span>
-          <select
-            disabled={busy}
-            value={campaign.status}
-            onChange={(e) => update(e.target.value)}
-          >
-            <option value="draft">{t("پیش‌نویس", "Draft")}</option>
-            <option value="scheduled">
-              {t("برنامه‌ریزی‌شده", "Scheduled")}
-            </option>
-            <option value="active">{t("در حال اجرا", "Active")}</option>
-            <option value="paused">{t("متوقف‌شده", "Paused")}</option>
-            <option value="completed">{t("پایان‌یافته", "Completed")}</option>
-          </select>
-        </label>
-      )}
-      {error && (
-        <div className="form-error" role="alert">
-          {error}
-        </div>
-      )}
-      <section className="detail-section">
-        <div className="section-title-row">
-          <h3>{t("شیفت‌های این کمپین", "Campaign shifts")}</h3>
-          {planner && !["paused", "completed"].includes(campaign.status) && (
-            <Button icon={Plus} onClick={() => open({ kind: "shift", id })}>
-              {t("شیفت جدید", "New shift")}
-            </Button>
+      {section === "messages" ? (
+        <CampaignMessages key={id} campaign={id} />
+      ) : null}
+      {section === "history" ? (
+        <CampaignHistory key={id} campaign={id} />
+      ) : null}
+      {section === "details" && (
+        <>
+          <div className={`campaign-detail-brand ${campaign.color}`}>
+            <span>{campaign.brand_name}</span>
+            <Badge value={campaign.status} />
+            <svg viewBox="0 0 150 150" aria-hidden="true">
+              <circle cx="75" cy="75" r="55" />
+              <circle cx="75" cy="75" r="38" />
+              <circle cx="75" cy="75" r="21" />
+              <path d="M75 0v150M0 75h150" />
+            </svg>
+          </div>
+          <div className="campaign-target">
+            <span>{t("توزیع نمونه‌ها", "Samples distributed")}</span>
+            <strong>
+              {n(campaign.distributed)}{" "}
+              <small>
+                {t("از", "of")} {n(campaign.target)}
+              </small>
+            </strong>
+            <Progress value={(campaign.distributed / campaign.target) * 100} />
+            <small>
+              {n(Math.round((campaign.distributed / campaign.target) * 100))}٪{" "}
+              {t("از هدف کمپین محقق شده", "of the campaign target reached")}
+            </small>
+          </div>
+          <div className="details-grid">
+            <div className="info-pair">
+              <span>{t("مشتری", "Client")}</span>
+              <strong>{campaign.customer_name}</strong>
+            </div>
+            <div className="info-pair">
+              <span>{t("نقاط اجرا", "Locations")}</span>
+              <strong>
+                {n(campaign.points)} {t("نقطه", "points")}
+              </strong>
+            </div>
+            <div className="info-pair">
+              <span>{t("شروع کمپین", "Starts")}</span>
+              <strong>{date(campaign.start_date + "T12:00:00")}</strong>
+            </div>
+            <div className="info-pair">
+              <span>{t("پایان کمپین", "Ends")}</span>
+              <strong>{date(campaign.end_date + "T12:00:00")}</strong>
+            </div>
+          </div>
+          <section className="detail-section">
+            <h3>{t("داستان این کمپین", "The campaign brief")}</h3>
+            <p className="prose-copy">
+              {campaign.description ||
+                t("توضیحی ثبت نشده است.", "No brief added yet.")}
+            </p>
+          </section>
+          {planner && (
+            <label className="form-field">
+              <span>{t("وضعیت کمپین", "Campaign status")}</span>
+              <select
+                disabled={busy}
+                value={campaign.status}
+                onChange={(e) => update(e.target.value)}
+              >
+                <option value="draft">{t("پیش‌نویس", "Draft")}</option>
+                <option value="scheduled">
+                  {t("برنامه‌ریزی‌شده", "Scheduled")}
+                </option>
+                <option value="active">{t("در حال اجرا", "Active")}</option>
+                <option value="paused">{t("متوقف‌شده", "Paused")}</option>
+                <option value="completed">
+                  {t("پایان‌یافته", "Completed")}
+                </option>
+              </select>
+            </label>
           )}
-        </div>
-        {shifts.length ? (
-          shifts.map((s) => (
-            <button
-              className="related-shift"
-              key={s.id}
-              onClick={() => {
-                onClose();
-                selectShift(s.id);
-              }}
-            >
-              <span>
-                <strong>{s.location_name}</strong>
-                <small>
-                  {s.city} ·{" "}
-                  {date(s.starts_at, { day: "numeric", month: "short" })}
-                </small>
-              </span>
-              <Badge value={s.status} />
-              <Arrow size={15} />
-            </button>
-          ))
-        ) : (
-          <Empty
-            title={t("اولین شیفت را برنامه‌ریزی کنید", "Plan your first shift")}
-          />
-        )}
-      </section>
+          {error && (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          )}
+          <section className="detail-section">
+            <div className="section-title-row">
+              <h3>{t("شیفت‌های این کمپین", "Campaign shifts")}</h3>
+              {planner &&
+                !["paused", "completed"].includes(campaign.status) && (
+                  <Button
+                    icon={Plus}
+                    onClick={() => open({ kind: "shift", id })}
+                  >
+                    {t("شیفت جدید", "New shift")}
+                  </Button>
+                )}
+            </div>
+            {shifts.length ? (
+              shifts.map((s) => (
+                <button
+                  className="related-shift"
+                  key={s.id}
+                  onClick={() => {
+                    onClose();
+                    selectShift(s.id);
+                  }}
+                >
+                  <span>
+                    <strong>{s.location_name}</strong>
+                    <small>
+                      {s.city} ·{" "}
+                      {date(s.starts_at, { day: "numeric", month: "short" })}
+                    </small>
+                  </span>
+                  <Badge value={s.status} />
+                  <Arrow size={15} />
+                </button>
+              ))
+            ) : (
+              <Empty
+                title={t(
+                  "اولین شیفت را برنامه‌ریزی کنید",
+                  "Plan your first shift",
+                )}
+              />
+            )}
+          </section>
+        </>
+      )}
     </Dialog>
   );
 }

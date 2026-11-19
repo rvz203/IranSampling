@@ -75,8 +75,9 @@ func (s *Server) updateCampaign(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(w, r, &b); err != nil {
 		return err
 	}
-	valid := map[string]bool{"active": true, "paused": true, "completed": true, "scheduled": true, "draft": true}
-	if !valid[b.Status] {
+	labels := map[string]string{"active": "در حال اجرا", "paused": "متوقف‌شده", "completed": "پایان‌یافته", "scheduled": "برنامه‌ریزی‌شده", "draft": "پیش‌نویس"}
+	label, valid := labels[b.Status]
+	if !valid {
 		return bad("Invalid campaign status")
 	}
 	err := s.transaction(r, func(tx pgx.Tx) error {
@@ -84,7 +85,7 @@ func (s *Server) updateCampaign(w http.ResponseWriter, r *http.Request) error {
 		if err := tx.QueryRow(r.Context(), "UPDATE campaigns SET status=$1 WHERE id=$2 RETURNING name", b.Status, r.PathValue("id")).Scan(&name); err != nil {
 			return err
 		}
-		return audit(r.Context(), tx, p, "campaign_update", "campaign", r.PathValue("id"), "وضعیت کمپین «"+name+"» تغییر کرد")
+		return audit(r.Context(), tx, p, "campaign_update", "campaign", r.PathValue("id"), "وضعیت کمپین «"+name+"» به «"+label+"» تغییر کرد")
 	})
 	if err != nil {
 		return err
@@ -146,7 +147,7 @@ func (s *Server) createShift(w http.ResponseWriter, r *http.Request) error {
 	sid := id("shift")
 	err := s.transaction(r, func(tx pgx.Tx) error {
 		var ok bool
-		if err := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM people WHERE id=$1 AND active AND role IN('admin','manager','coordinator','supervisor'))", b.SupervisorID).Scan(&ok); err != nil {
+		if err := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM people WHERE id=$1 AND active AND role='supervisor')", b.SupervisorID).Scan(&ok); err != nil {
 			return err
 		}
 		if !ok {
@@ -229,12 +230,19 @@ func (s *Server) createPerson(w http.ResponseWriter, r *http.Request) error {
 	if p.Role != "admin" && p.Role != "manager" {
 		return forbidden()
 	}
-	var b struct{ Name, Email, Role, City, Phone, Password string }
+	var b struct{ Name, Email, Username, Role, City, Phone, Password string }
 	if err := readJSON(w, r, &b); err != nil {
 		return err
 	}
-	if _, err := mail.ParseAddress(b.Email); err != nil || len([]rune(b.Name)) < 2 || len(b.Password) < 12 || len(b.Password) > 72 {
+	b.Email = strings.ToLower(strings.TrimSpace(b.Email))
+	b.Name = strings.TrimSpace(b.Name)
+	address, err := mail.ParseAddress(b.Email)
+	if err != nil || address.Address != b.Email || len(b.Email) > 254 || len([]rune(b.Name)) < 2 || !validPassword(b.Password) {
 		return bad("نام، ایمیل و رمز حداقل ۱۲ کاراکتری لازم است / A name, email and 12-character password are required")
+	}
+	username, err := normalizeUsername(b.Username)
+	if err != nil {
+		return err
 	}
 	roles := map[string]bool{"admin": true, "manager": true, "coordinator": true, "supervisor": true, "sampler": true}
 	if !roles[b.Role] || b.Role == "admin" && p.Role != "admin" {
@@ -246,7 +254,7 @@ func (s *Server) createPerson(w http.ResponseWriter, r *http.Request) error {
 	}
 	pid := id("person")
 	err = s.transaction(r, func(tx pgx.Tx) error {
-		_, err := tx.Exec(r.Context(), "INSERT INTO people(id,name,email,password_hash,role,city,phone) VALUES($1,$2,$3,$4,$5,$6,$7)", pid, b.Name, strings.ToLower(strings.TrimSpace(b.Email)), string(hash), b.Role, b.City, b.Phone)
+		_, err := tx.Exec(r.Context(), "INSERT INTO people(id,name,email,username,password_hash,role,city,phone) VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8)", pid, b.Name, b.Email, username, string(hash), b.Role, b.City, b.Phone)
 		if err != nil {
 			return err
 		}

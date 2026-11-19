@@ -29,12 +29,12 @@ The document proposes a first version of a sampling operations system for Iran S
 - The overview reports today's activity and a 7/14-day trend. CSV export supports 7/30/90-day periods and city selection. Every displayed operational quantity comes from persisted records.
 - The map is explicitly labeled as schematic. Markers use actual saved coordinates; the streets are illustrative and require no third-party map service. Directions open a conventional map provider.
 - Evidence is limited to authenticated JPEG/PNG images, 8 MB and 25 megapixels. Original names are metadata; random server-generated names are used on disk.
-- There is no automatic offline queue. Failed writes show errors. If a write succeeds but the follow-up read fails, a notice confirms the save and offers refresh; the UI does not invite repetition of a committed write. The proposal explicitly leaves full offline synchronization and weak-connectivity acceptance rules to a later requirements workshop.
+- The field app queues location samples and photo files during a connection outage and retries them for the same account. Check-in, check-out, inventory, issue and report writes use the online server rules. A successful web write followed by a failed read offers refresh without repeating the committed write.
 
 ## Phase-one boundaries
 
 The PDF lists recruitment and testing, structured training, dynamic form building, automatic wages and payments, advanced staff evaluation, complex analytics, intelligent allocation and AI features as later-phase work. Those are not represented as implemented features.
 
-This repository implements the core first-version workflows. SMS notifications, a native mobile app, production identity federation, continuous GPS tracking, offline synchronization and third-party business-system integrations are not implemented. The proposal's price, payment terms and estimated 8–12 week delivery plan are commercial context, not application features.
+This repository implements the core workflows and the added Android/iOS field app. Location sharing is limited to the active shift with the worker's permission. The app targets 30-second samples and shows stale locations when the OS or connection delays delivery. The proposal's commercial terms, SMS notifications, identity federation and third-party business-system integrations remain outside the implementation.
 
 The remaining product validation is a real pilot with agreed operating locations, role rules, acceptable GPS radius/accuracy, connectivity expectations, and stakeholder acceptance scenarios.

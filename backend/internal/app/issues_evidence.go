@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -110,6 +112,9 @@ func (s *Server) updateIssue(w http.ResponseWriter, r *http.Request) error {
 	writeJSON(w, 200, map[string]bool{"ok": true})
 	return nil
 }
+
+var evidenceClientID = regexp.MustCompile(`^[a-zA-Z0-9_-]{8,64}$`)
+
 func (s *Server) uploadEvidence(w http.ResponseWriter, r *http.Request) error {
 	p := current(r)
 	sid := r.PathValue("id")
@@ -156,33 +161,55 @@ func (s *Server) uploadEvidence(w http.ResponseWriter, r *http.Request) error {
 	if len([]rune(caption)) > 2000 {
 		return bad("توضیح تصویر بیش از حد طولانی است / Caption is too long")
 	}
+	clientID := r.FormValue("client_id")
+	if clientID != "" && !evidenceClientID.MatchString(clientID) {
+		return bad("شناسه ارسال تصویر معتبر نیست / Invalid photo submission ID")
+	}
 	eid := id("evidence")
 	filename := eid + ext
-	if err = ensureDir(s.cfg.UploadDir); err != nil {
-		return err
-	}
 	path := filepath.Join(s.cfg.UploadDir, filename)
-	if err = os.WriteFile(path, data, 0600); err != nil {
-		return err
-	}
+	var wroteFile bool
+	resultStatus := http.StatusCreated
 	err = s.transaction(r, func(tx pgx.Tx) error {
 		var status string
 		if err := tx.QueryRow(r.Context(), "SELECT status FROM shifts WHERE id=$1 FOR UPDATE", sid).Scan(&status); err != nil {
 			return err
 		}
+		// A retry after a lost response must succeed even if the shift has since closed.
+		if clientID != "" {
+			var existing string
+			err := tx.QueryRow(r.Context(), "SELECT id FROM evidence WHERE shift_id=$1 AND person_id=$2 AND client_id=$3", sid, p.ID, clientID).Scan(&existing)
+			if err == nil {
+				eid = existing
+				resultStatus = http.StatusOK
+				return nil
+			}
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+		}
 		if status == "completed" {
 			return bad("شیفت پایان یافته است / Shift is completed")
 		}
-		if _, err := tx.Exec(r.Context(), "INSERT INTO evidence(id,shift_id,person_id,filename,original_name,mime_type,caption) VALUES($1,$2,$3,$4,$5,$6,$7)", eid, sid, p.ID, filename, filepath.Base(header.Filename), kind, caption); err != nil {
+		if err := ensureDir(s.cfg.UploadDir); err != nil {
+			return err
+		}
+		wroteFile = true
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(r.Context(), "INSERT INTO evidence(id,shift_id,person_id,filename,original_name,mime_type,caption,client_id) VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,''))", eid, sid, p.ID, filename, filepath.Base(header.Filename), kind, caption, clientID); err != nil {
 			return err
 		}
 		return audit(r.Context(), tx, p, "evidence_upload", "shift", sid, "تصویر مستندات اجرا بارگذاری شد")
 	})
 	if err != nil {
-		os.Remove(path)
+		if wroteFile {
+			os.Remove(path)
+		}
 		return err
 	}
-	writeJSON(w, 201, map[string]string{"id": eid, "url": "/api/evidence/" + eid})
+	writeJSON(w, resultStatus, map[string]string{"id": eid, "url": "/api/evidence/" + eid})
 	return nil
 }
 func (s *Server) serveEvidence(w http.ResponseWriter, r *http.Request) error {

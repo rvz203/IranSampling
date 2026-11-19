@@ -9,18 +9,23 @@ import (
 )
 
 const visibleShift = `($1::boolean OR s.supervisor_id=$2 OR EXISTS(SELECT 1 FROM assignments a WHERE a.shift_id=s.id AND a.person_id=$2))`
+const visibleCampaign = `($1::boolean OR EXISTS(SELECT 1 FROM shifts s WHERE s.campaign_id=c.id AND ` + visibleShift + `))`
 
 func (s *Server) workspace(w http.ResponseWriter, r *http.Request) error {
 	p := current(r)
 	ctx := r.Context()
-	out := map[string]any{"user": p, "demo": s.cfg.Demo, "server_time": time.Now().UTC()}
+	out := map[string]any{"user": p, "demo": s.cfg.Demo, "server_time": time.Now().UTC(), "map_available": s.mapReady()}
 	queries := map[string]string{
 		"customers": `SELECT * FROM customers ORDER BY name`,
 		"brands":    `SELECT * FROM brands ORDER BY name`,
 		"products":  `SELECT * FROM products ORDER BY name`,
-		"campaigns": `SELECT c.*,b.name brand_name,b.color,pr.name product_name,cu.name customer_name,COALESCE(x.distributed,0)::integer distributed,COALESCE(x.points,0)::integer points FROM campaigns c JOIN brands b ON b.id=c.brand_id JOIN products pr ON pr.id=c.product_id JOIN customers cu ON cu.id=b.customer_id LEFT JOIN LATERAL(SELECT count(DISTINCT s.location_id) points,(SELECT COALESCE(sum(m.quantity),0) FROM stock_movements m JOIN shifts s2 ON s2.id=m.shift_id WHERE s2.campaign_id=c.id AND m.kind='distributed') distributed FROM shifts s WHERE s.campaign_id=c.id) x ON true WHERE $1 OR EXISTS(SELECT 1 FROM shifts s WHERE s.campaign_id=c.id AND ` + visibleShift + `) ORDER BY c.created_at DESC,c.id`,
+		"campaigns": `SELECT c.*,b.name brand_name,b.color,pr.name product_name,cu.name customer_name,COALESCE(x.distributed,0)::integer distributed,COALESCE(x.points,0)::integer points
+			FROM campaigns c JOIN brands b ON b.id=c.brand_id JOIN products pr ON pr.id=c.product_id JOIN customers cu ON cu.id=b.customer_id
+			LEFT JOIN LATERAL(SELECT count(DISTINCT s.location_id) points,sum(m.distributed) distributed FROM shifts s
+				LEFT JOIN LATERAL(SELECT sum(quantity) distributed FROM stock_movements WHERE shift_id=s.id AND kind='distributed') m ON true
+				WHERE s.campaign_id=c.id AND ` + visibleShift + `) x ON true WHERE ` + visibleCampaign + ` ORDER BY c.created_at DESC,c.id`,
 		"locations": `SELECT l.* FROM locations l WHERE $1 OR EXISTS(SELECT 1 FROM shifts s WHERE s.location_id=l.id AND ` + visibleShift + `) ORDER BY l.city,l.name`,
-		"people":    `SELECT p.id,p.name,CASE WHEN $1 OR p.id=$2 THEN p.email ELSE '' END email,p.role,p.city,p.color,p.active,CASE WHEN $1 OR p.id=$2 THEN p.phone ELSE '' END phone FROM people p WHERE $1 OR p.id=$2 OR EXISTS(SELECT 1 FROM assignments a JOIN shifts s ON s.id=a.shift_id WHERE a.person_id=p.id AND ` + visibleShift + `) OR EXISTS(SELECT 1 FROM shifts s WHERE s.supervisor_id=p.id AND ` + visibleShift + `) ORDER BY p.created_at,p.id`,
+		"people":    `SELECT p.id,p.name,CASE WHEN $1 OR p.id=$2 THEN p.email ELSE '' END email,CASE WHEN $3 OR p.id=$2 THEN COALESCE(p.username,'') ELSE '' END username,p.role,p.city,p.color,p.active,CASE WHEN $1 OR p.id=$2 THEN p.phone ELSE '' END phone FROM people p WHERE $1 OR p.id=$2 OR EXISTS(SELECT 1 FROM assignments a JOIN shifts s ON s.id=a.shift_id WHERE a.person_id=p.id AND ` + visibleShift + `) OR EXISTS(SELECT 1 FROM shifts s WHERE s.supervisor_id=p.id AND ` + visibleShift + `) ORDER BY p.created_at,p.id`,
 		"shifts": `SELECT s.*,c.name campaign_name,b.name brand_name,b.color,l.name location_name,l.city,l.address,l.latitude,l.longitude,l.radius,p.name supervisor_name,
    COALESCE((SELECT jsonb_agg(jsonb_build_object('id',p2.id,'name',p2.name,'color',p2.color,'confirmed',a.confirmed)) FROM assignments a JOIN people p2 ON p2.id=a.person_id WHERE a.shift_id=s.id),'[]') team,
    COALESCE((SELECT sum(quantity) FROM stock_movements m WHERE m.shift_id=s.id AND m.kind='distributed'),0)::integer distributed,
@@ -45,6 +50,8 @@ func (s *Server) workspace(w http.ResponseWriter, r *http.Request) error {
 		args := []any{isPlanner(p), p.ID}
 		if key == "customers" || key == "brands" || key == "products" {
 			args = nil
+		} else if key == "people" {
+			args = append(args, p.Role == "admin")
 		}
 		if err := s.db.QueryRow(ctx, "SELECT COALESCE(jsonb_agg(t),'[]'::jsonb) FROM ("+q+") t", args...).Scan(&raw); err != nil {
 			return err

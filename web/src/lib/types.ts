@@ -1,6 +1,6 @@
 export type Locale = "fa" | "en";
 export type Role = "admin" | "manager" | "coordinator" | "supervisor" | "sampler";
-export type Person = { id: string; name: string; email: string; role: Role; city: string; color: string; phone?: string; active?: boolean };
+export type Person = { id: string; name: string; email: string; username?: string; role: Role; city: string; color: string; phone?: string; active?: boolean };
 export type Customer = { id: string; name: string };
 export type Brand = { id: string; name: string; customer_id: string; color: string };
 export type Product = { id: string; name: string; brand_id: string; unit: string };
@@ -13,6 +13,6 @@ export type Report = { id: string; shift_id: string; submitted_by: string; summa
 export type Issue = { id: string; shift_id: string; title: string; description: string; priority: string; status: string; owner_id: string; owner_name: string; created_at: string; updated_at: string; location_name: string; city: string; campaign_name: string };
 export type Evidence = { id: string; shift_id: string; person_id: string; original_name: string; caption: string; created_at: string; person_name: string; location_name: string };
 export type AuditEvent = { id: string; actor_id: string; action: string; entity_type: string; entity_id: string; detail: string; created_at: string; actor_name: string; color: string };
-export type WorkspaceData = { user: Person; demo: boolean; server_time: string; customers: Customer[]; brands: Brand[]; products: Product[]; campaigns: Campaign[]; locations: Location[]; people: Person[]; shifts: Shift[]; attendance: Attendance[]; stock: Stock[]; reports: Report[]; issues: Issue[]; evidence: Evidence[]; events: AuditEvent[]; trend: { date: string; distributed: number }[] };
+export type WorkspaceData = { user: Person; demo: boolean; map_available?: boolean; server_time: string; customers: Customer[]; brands: Brand[]; products: Product[]; campaigns: Campaign[]; locations: Location[]; people: Person[]; shifts: Shift[]; attendance: Attendance[]; stock: Stock[]; reports: Report[]; issues: Issue[]; evidence: Evidence[]; events: AuditEvent[]; trend: { date: string; distributed: number }[] };
 export type View = "overview" | "campaigns" | "shifts" | "map" | "team" | "attendance" | "inventory" | "issues" | "reports" | "catalog";
 export type DialogState = { kind: string; id?: string; subtype?: string } | null;

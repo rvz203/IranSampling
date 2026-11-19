@@ -23,10 +23,15 @@ services:
       APP_ENV: ${APP_ENV:-development}
       ENABLE_DEMO: ${ENABLE_DEMO:-true}
       UPLOAD_DIR: /data/uploads
+      MAP_DATA_DIR: /data/maps
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     volumes:
       - evidence_data:/data/uploads
+      - type: bind
+        source: ${MAP_DATA_HOST_DIR:-./.local/maps}
+        target: /data/maps
+        read_only: true
     depends_on:
       database:
         condition: service_healthy

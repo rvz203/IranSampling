@@ -725,7 +725,7 @@ function Login({
   signedOut: boolean;
 }) {
   const t = (fa: string, en: string) => (locale === "fa" ? fa : en);
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError);
@@ -735,7 +735,9 @@ function Login({
     try {
       await api(isDemo ? "/auth/demo" : "/auth/login", {
         method: "POST",
-        body: JSON.stringify(isDemo ? { role: "admin" } : { email, password }),
+        body: JSON.stringify(
+          isDemo ? { role: "admin" } : { identifier, password },
+        ),
       });
       sessionStorage.removeItem("faracode-signed-out");
       await onLogin();
@@ -828,15 +830,16 @@ function Login({
               }}
             >
               <label className="form-field">
-                <span>{t("ایمیل کاری", "Work email")}</span>
+                <span>{t("نام کاربری یا ایمیل", "Username or email")}</span>
                 <input
-                  type="email"
+                  type="text"
                   dir="ltr"
                   autoComplete="username"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  autoCapitalize="none"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   required
-                  placeholder="you@company.com"
+                  placeholder="sampler.tehran"
                 />
               </label>
               <label className="form-field">

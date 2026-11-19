@@ -73,3 +73,51 @@ CREATE TABLE IF NOT EXISTS audit_events (
  entity_id text NOT NULL, detail text NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO schema_migrations(version) VALUES(1) ON CONFLICT DO NOTHING;
+
+ALTER TABLE people ADD COLUMN IF NOT EXISTS username text CHECK (username ~ '^[a-z0-9][a-z0-9._-]{2,31}$');
+CREATE UNIQUE INDEX IF NOT EXISTS people_username_unique ON people(username) WHERE username IS NOT NULL;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS client text NOT NULL DEFAULT 'web' CHECK (client IN ('web','mobile'));
+CREATE INDEX IF NOT EXISTS sessions_person_idx ON sessions(person_id);
+ALTER TABLE evidence ADD COLUMN IF NOT EXISTS client_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS evidence_client_unique ON evidence(shift_id,person_id,client_id) WHERE client_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS tracking_sessions (
+ id text PRIMARY KEY, attendance_id text NOT NULL REFERENCES attendance(id) ON DELETE CASCADE,
+ started_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz NOT NULL,
+ stopped_at timestamptz, CHECK(expires_at > started_at),
+ CHECK(stopped_at IS NULL OR stopped_at >= started_at)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS tracking_open_attendance_idx ON tracking_sessions(attendance_id) WHERE stopped_at IS NULL;
+CREATE INDEX IF NOT EXISTS tracking_expiry_idx ON tracking_sessions(expires_at);
+CREATE TABLE IF NOT EXISTS tracking_samples (
+ tracking_id text NOT NULL REFERENCES tracking_sessions(id) ON DELETE CASCADE,
+ bucket bigint NOT NULL, captured_at timestamptz NOT NULL, received_at timestamptz NOT NULL DEFAULT now(),
+ latitude double precision NOT NULL CHECK(latitude BETWEEN -90 AND 90),
+ longitude double precision NOT NULL CHECK(longitude BETWEEN -180 AND 180),
+ accuracy double precision NOT NULL CHECK(accuracy > 0 AND accuracy <= 1000),
+ PRIMARY KEY(tracking_id,bucket)
+);
+CREATE INDEX IF NOT EXISTS tracking_sample_retention_idx ON tracking_samples(captured_at);
+INSERT INTO schema_migrations(version) VALUES(2) ON CONFLICT DO NOTHING;
+
+ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS campaign_id text REFERENCES campaigns(id);
+UPDATE audit_events e SET campaign_id=c.id FROM campaigns c
+ WHERE e.campaign_id IS NULL AND e.entity_type='campaign' AND c.id=e.entity_id;
+UPDATE audit_events e SET campaign_id=s.campaign_id FROM shifts s
+ WHERE e.campaign_id IS NULL AND e.entity_type='shift' AND s.id=e.entity_id;
+UPDATE audit_events e SET campaign_id=s.campaign_id FROM shift_reports r JOIN shifts s ON s.id=r.shift_id
+ WHERE e.campaign_id IS NULL AND e.entity_type='report' AND r.id=e.entity_id;
+CREATE INDEX IF NOT EXISTS audit_campaign_history_idx ON audit_events(campaign_id,created_at DESC,id DESC);
+CREATE INDEX IF NOT EXISTS shifts_campaign_idx ON shifts(campaign_id);
+
+CREATE TABLE IF NOT EXISTS campaign_messages (
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ campaign_id text NOT NULL REFERENCES campaigns(id),
+ sender_id text NOT NULL REFERENCES people(id),
+ sender_name text NOT NULL, sender_role text NOT NULL,
+ client_id uuid NOT NULL, body text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 2000),
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ UNIQUE(campaign_id,sender_id,client_id)
+);
+CREATE INDEX IF NOT EXISTS campaign_messages_feed_idx ON campaign_messages(campaign_id,id DESC);
+INSERT INTO schema_migrations(version) VALUES(3) ON CONFLICT DO NOTHING;

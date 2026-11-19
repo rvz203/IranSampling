@@ -147,7 +147,12 @@ func Seed(ctx context.Context, pool *pgxpool.Pool) error {
 		{"p-sampler", "check_in", "shift", "shift-1", "مهسا حسینی در پالادیوم ثبت ورود کرد"},
 		{"p-admin", "campaign_create", "campaign", "cmp-5", "کمپین «صبحانه با لبخند» برنامه‌ریزی شد"},
 	} {
-		if _, err = tx.Exec(ctx, `INSERT INTO audit_events(id,actor_id,action,entity_type,entity_id,detail,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, fmt.Sprintf("event-%d", i), v[0], v[1], v[2], v[3], v[4], now.Add(-time.Duration(i*17+4)*time.Minute)); err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO audit_events(id,actor_id,action,entity_type,entity_id,detail,created_at,campaign_id)
+			VALUES($1,$2,$3,$4,$5,$6,$7,CASE $4
+				WHEN 'campaign' THEN $5
+				WHEN 'shift' THEN (SELECT campaign_id FROM shifts WHERE id=$5)
+				WHEN 'report' THEN (SELECT s.campaign_id FROM shift_reports r JOIN shifts s ON s.id=r.shift_id WHERE r.id=$5)
+			END)`, fmt.Sprintf("event-%d", i), v[0], v[1], v[2], v[3], v[4], now.Add(-time.Duration(i*17+4)*time.Minute)); err != nil {
 			return err
 		}
 	}

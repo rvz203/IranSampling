@@ -1,4 +1,5 @@
 "use client";
+import { mapLocationUrl } from "./iran-map";
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -528,12 +529,12 @@ export function LocationCards({ rows }: { rows: Location[] }) {
               </button>
               <a
                 className="directions-chip"
-                href={`https://www.google.com/maps/dir/?api=1&destination=${l.latitude},${l.longitude}`}
+                href={mapLocationUrl(l.latitude, l.longitude)}
                 target="_blank"
                 rel="noreferrer"
               >
                 <Navigation size={14} />
-                {t("مسیریابی", "Directions")}
+                {t("باز کردن نقشه", "Open map")}
               </a>
             </div>
           </article>

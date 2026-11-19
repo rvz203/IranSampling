@@ -62,11 +62,34 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	server := app.New(pool, app.Config{Demo: demo, Production: os.Getenv("APP_ENV") == "production", UploadDir: os.Getenv("UPLOAD_DIR")})
+	mapData := os.Getenv("MAP_DATA_DIR")
+	if mapData == "" {
+		mapData = "../.local/maps"
+	}
+	server := app.New(pool, app.Config{
+		Demo: demo, Production: os.Getenv("APP_ENV") == "production",
+		UploadDir: os.Getenv("UPLOAD_DIR"), MapDataDir: mapData,
+	})
 	if err = server.BootstrapAdmin(ctx, os.Getenv("ADMIN_EMAIL"), os.Getenv("ADMIN_PASSWORD")); err != nil {
 		slog.Error("admin bootstrap failed", "error", err)
 		os.Exit(1)
 	}
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			pruneCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			if err := server.PruneTracking(pruneCtx); err != nil && ctx.Err() == nil {
+				slog.Error("location retention cleanup failed", "error", err)
+			}
+			cancel()
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 	port := os.Getenv("API_PORT")
 	if port == "" {
 		port = "8080"

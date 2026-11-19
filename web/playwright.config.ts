@@ -25,6 +25,9 @@ export default defineConfig({
     baseURL,
     browserName: "chromium",
     channel: process.env.PLAYWRIGHT_BROWSER_CHANNEL || "chrome",
+    launchOptions: {
+      args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+    },
     viewport: { width: 1440, height: 1000 },
     locale: "en-GB",
     timezoneId: "Asia/Tehran",

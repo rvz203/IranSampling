@@ -9,6 +9,7 @@ import {
   FileText,
   Globe2,
   Info,
+  KeyRound,
   LocateFixed,
   MapPin,
   Package,
@@ -39,6 +40,9 @@ type Field = {
   min?: number;
   max?: number;
   minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  ltr?: boolean;
   step?: string;
   options?: { value: string; label: string }[];
   wide?: boolean;
@@ -134,6 +138,7 @@ export function SubmitForm({
                 name={f.name}
                 type={f.type || "text"}
                 dir={
+                  f.ltr ||
                   [
                     "email",
                     "password",
@@ -155,7 +160,10 @@ export function SubmitForm({
                 max={f.max}
                 step={f.step}
                 minLength={f.minLength}
-                maxLength={f.type === "password" ? 72 : undefined}
+                maxLength={
+                  f.maxLength ?? (f.type === "password" ? 72 : undefined)
+                }
+                pattern={f.pattern}
                 autoComplete={
                   f.type === "password" ? "new-password" : undefined
                 }
@@ -301,6 +309,7 @@ export default function AppDialog({
     time,
     planner,
     reviewer,
+    open,
     close,
     mutate,
     refresh,
@@ -457,7 +466,7 @@ export default function AppDialog({
           name: "supervisor_id",
           label: t("سرپرست", "Supervisor"),
           options: data.people
-            .filter((p) => p.role !== "sampler")
+            .filter((p) => p.role === "supervisor" && p.active !== false)
             .map((p) => ({ value: p.id, label: p.name })),
         },
         {
@@ -594,6 +603,19 @@ export default function AppDialog({
               minLength: 2,
             },
             { name: "email", label: t("ایمیل", "Email"), type: "email" },
+            {
+              name: "username",
+              label: t("نام کاربری", "Username"),
+              required: false,
+              ltr: true,
+              minLength: 3,
+              maxLength: 32,
+              placeholder: "sampler.tehran",
+              hint: t(
+                "۳ تا ۳۲ نویسه انگلیسی. در صورت خالی بودن، ورود با ایمیل است.",
+                "3–32 Latin characters. Leave blank for email sign-in.",
+              ),
+            },
             {
               name: "role",
               label: t("نقش", "Role"),
@@ -1145,6 +1167,11 @@ export default function AppDialog({
             <InfoPair label={t("ایمیل", "Email")}>
               <span dir="ltr">{p.email || "—"}</span>
             </InfoPair>
+            {(data.user.role === "admin" || data.user.id === p.id) && (
+              <InfoPair label={t("نام کاربری", "Username")}>
+                <span dir="ltr">{p.username || "—"}</span>
+              </InfoPair>
+            )}
             <InfoPair label={t("تلفن", "Phone")}>{p.phone || "—"}</InfoPair>
             <InfoPair label={t("شیفت‌های مرتبط", "Related shifts")}>
               {n(
@@ -1156,8 +1183,61 @@ export default function AppDialog({
               )}
             </InfoPair>
           </div>
+          {data.user.role === "admin" && (
+            <div className="form-footer">
+              <Button
+                icon={KeyRound}
+                onClick={() => open({ kind: "person-credentials", id: p.id })}
+              >
+                {t("تنظیم نام کاربری و رمز", "Manage sign-in credentials")}
+              </Button>
+            </div>
+          )}
         </>
       ) : null;
+      break;
+    }
+    case "person-credentials": {
+      const person = data.people.find((item) => item.id === state.id);
+      title = t("اطلاعات ورود همکار", "Teammate sign-in credentials");
+      description = person?.name ?? "";
+      if (!person || data.user.role !== "admin") break;
+      content = (
+        <SubmitForm
+          fields={[
+            {
+              name: "username",
+              label: t("نام کاربری", "Username"),
+              ltr: true,
+              required: false,
+              minLength: 3,
+              maxLength: 32,
+              default: person.username,
+              wide: true,
+              hint: t(
+                "نام کاربری جدید یا خالی برای ورود با ایمیل.",
+                "Set a username, or leave it blank for email sign-in.",
+              ),
+            },
+            {
+              name: "password",
+              label: t("رمز عبور جدید", "New password"),
+              type: "password",
+              required: false,
+              minLength: 12,
+              wide: true,
+              hint: t(
+                "خالی بماند تا رمز فعلی حفظ شود. تغییر رمز، نشست‌های وب و موبایل این حساب را می‌بندد.",
+                "Leave blank to keep the current password. A reset signs this account out of web and mobile.",
+              ),
+            },
+          ]}
+          action={(values) =>
+            submit(`/people/${person.id}/credentials`, values, "PATCH")
+          }
+          label={t("ذخیره اطلاعات ورود", "Save credentials")}
+        />
+      );
       break;
     }
     case "issue-detail": {

@@ -26,6 +26,7 @@ import (
 type Config struct {
 	Demo, Production bool
 	UploadDir        string
+	MapDataDir       string
 }
 type Server struct {
 	db       *pgxpool.Pool
@@ -33,16 +34,18 @@ type Server struct {
 	attempts sync.Map
 }
 type Person struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
-	City  string `json:"city"`
-	Color string `json:"color"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Username string `json:"username,omitempty"`
+	Role     string `json:"role"`
+	City     string `json:"city"`
+	Color    string `json:"color"`
 }
 type contextKey string
 
 const userKey contextKey = "person"
+const sessionKey contextKey = "session_hash"
 
 type apiError struct {
 	status  int
@@ -130,7 +133,11 @@ func (s *Server) Handler() http.Handler {
 		return nil
 	}))
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]bool{"demo": s.cfg.Demo}) })
+	mux.HandleFunc("GET /api/maps/view", s.mapView)
+	mux.HandleFunc("GET /api/maps/iran.pmtiles", s.mapArchive)
+	mux.HandleFunc("GET /api/maps/assets/{file...}", s.mapAsset)
 	mux.HandleFunc("POST /api/auth/login", s.endpoint(s.login))
+	mux.HandleFunc("POST /api/mobile/auth/login", s.endpoint(s.mobileLogin))
 	mux.HandleFunc("POST /api/auth/demo", s.endpoint(s.demoLogin))
 	mux.Handle("POST /api/auth/logout", s.auth(s.endpoint(s.logout)))
 	mux.Handle("GET /api/auth/me", s.auth(s.endpoint(func(w http.ResponseWriter, r *http.Request) error { writeJSON(w, 200, current(r)); return nil })))
@@ -138,6 +145,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/reports/export", s.auth(s.endpoint(s.exportCSV)))
 	mux.Handle("POST /api/campaigns", s.auth(s.endpoint(s.createCampaign)))
 	mux.Handle("PATCH /api/campaigns/{id}", s.auth(s.endpoint(s.updateCampaign)))
+	mux.Handle("GET /api/campaigns/{id}/messages", s.auth(s.endpoint(s.campaignMessages)))
+	mux.Handle("POST /api/campaigns/{id}/messages", s.auth(s.endpoint(s.postCampaignMessage)))
+	mux.Handle("GET /api/campaigns/{id}/history", s.auth(s.endpoint(s.campaignHistory)))
 	mux.Handle("POST /api/locations", s.auth(s.endpoint(s.createLocation)))
 	mux.Handle("POST /api/shifts", s.auth(s.endpoint(s.createShift)))
 	mux.Handle("POST /api/shifts/{id}/assignments", s.auth(s.endpoint(s.assignPerson)))
@@ -152,6 +162,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/issues", s.auth(s.endpoint(s.createIssue)))
 	mux.Handle("PATCH /api/issues/{id}", s.auth(s.endpoint(s.updateIssue)))
 	mux.Handle("POST /api/people", s.auth(s.endpoint(s.createPerson)))
+	mux.Handle("PATCH /api/people/{id}/credentials", s.auth(s.endpoint(s.updateCredentials)))
+	mux.Handle("GET /api/tracking/live", s.auth(s.endpoint(s.liveTracking)))
+	mux.Handle("POST /api/shifts/{id}/tracking", s.auth(s.endpoint(s.startTracking)))
+	mux.Handle("POST /api/tracking/{id}/samples", s.auth(s.endpoint(s.recordTrackingSamples)))
+	mux.Handle("POST /api/tracking/{id}/stop", s.auth(s.endpoint(s.stopTracking)))
 	mux.Handle("POST /api/catalog", s.auth(s.endpoint(s.createCatalog)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -171,14 +186,25 @@ func (s *Server) Handler() http.Handler {
 }
 func (s *Server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("sampling_session")
-		if err != nil {
+		var token string
+		client := "web"
+		if header := r.Header.Get("Authorization"); header != "" {
+			client = "mobile"
+			scheme, value, ok := strings.Cut(header, " ")
+			if ok && strings.EqualFold(scheme, "Bearer") {
+				token = value
+			}
+		} else if cookie, err := r.Cookie("sampling_session"); err == nil {
+			token = cookie.Value
+		}
+		if token == "" || len(token) > 128 {
 			writeJSON(w, 401, map[string]string{"error": "لطفاً وارد حساب شوید / Please sign in"})
 			return
 		}
-		digest := sha256.Sum256([]byte(cookie.Value))
+		digest := sha256.Sum256([]byte(token))
+		sessionHash := hex.EncodeToString(digest[:])
 		var p Person
-		err = s.db.QueryRow(r.Context(), `SELECT p.id,p.name,p.email,p.role,p.city,p.color FROM sessions x JOIN people p ON p.id=x.person_id WHERE x.token_hash=$1 AND x.expires_at>now() AND p.active`, hex.EncodeToString(digest[:])).Scan(&p.ID, &p.Name, &p.Email, &p.Role, &p.City, &p.Color)
+		err := s.db.QueryRow(r.Context(), `SELECT p.id,p.name,p.email,COALESCE(p.username,''),p.role,p.city,p.color FROM sessions x JOIN people p ON p.id=x.person_id WHERE x.token_hash=$1 AND x.client=$2 AND x.expires_at>now() AND p.active`, sessionHash, client).Scan(&p.ID, &p.Name, &p.Email, &p.Username, &p.Role, &p.City, &p.Color)
 		if err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
 				s.respondError(w, err)
@@ -187,19 +213,33 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			writeJSON(w, 401, map[string]string{"error": "نشست منقضی شده است / Session expired"})
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, p)))
+		ctx := context.WithValue(r.Context(), userKey, p)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, sessionKey, sessionHash)))
 	})
 }
-func (s *Server) session(w http.ResponseWriter, r *http.Request, p Person) error {
+func (s *Server) session(w http.ResponseWriter, r *http.Request, p Person, client, verifiedHash string) error {
 	token := id("session")
 	digest := sha256.Sum256([]byte(token))
-	expires := time.Now().Add(12 * time.Hour)
+	validFor := 12 * time.Hour
+	if client == "mobile" {
+		validFor = 7 * 24 * time.Hour
+	}
+	expires := time.Now().Add(validFor)
 	tx, err := s.db.Begin(r.Context())
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(r.Context())
-	if old, err := r.Cookie("sampling_session"); err == nil {
+	if verifiedHash != "" {
+		var currentHash string
+		if err := tx.QueryRow(r.Context(), "SELECT password_hash FROM people WHERE id=$1 AND active FOR SHARE", p.ID).Scan(&currentHash); err != nil {
+			return err
+		}
+		if currentHash != verifiedHash {
+			return invalidLogin()
+		}
+	}
+	if old, err := r.Cookie("sampling_session"); client == "web" && err == nil {
 		oldHash := sha256.Sum256([]byte(old.Value))
 		if _, err = tx.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", hex.EncodeToString(oldHash[:])); err != nil {
 			return err
@@ -208,13 +248,17 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request, p Person) error
 	if _, err = tx.Exec(r.Context(), "DELETE FROM sessions WHERE expires_at<now()"); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(r.Context(), "INSERT INTO sessions(token_hash,person_id,expires_at) VALUES($1,$2,$3)", hex.EncodeToString(digest[:]), p.ID, expires); err != nil {
+	if _, err = tx.Exec(r.Context(), "INSERT INTO sessions(token_hash,person_id,expires_at,client) VALUES($1,$2,$3,$4)", hex.EncodeToString(digest[:]), p.ID, expires, client); err != nil {
 		return err
 	}
 	if err = tx.Commit(r.Context()); err != nil {
 		return err
 	}
-	http.SetCookie(w, &http.Cookie{Name: "sampling_session", Value: token, Path: "/", HttpOnly: true, Secure: s.cfg.Production, SameSite: http.SameSiteLaxMode, MaxAge: 43200, Expires: expires})
+	if client == "mobile" {
+		writeJSON(w, 200, map[string]any{"token": token, "expires_at": expires, "user": p})
+		return nil
+	}
+	http.SetCookie(w, &http.Cookie{Name: "sampling_session", Value: token, Path: "/", HttpOnly: true, Secure: s.cfg.Production, SameSite: http.SameSiteLaxMode, MaxAge: int(validFor.Seconds()), Expires: expires})
 	writeJSON(w, 200, p)
 	return nil
 }
@@ -248,30 +292,51 @@ func (s *Server) reserveLoginAttempt(key string) bool {
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
-	var body struct{ Email, Password string }
+	return s.loginClient(w, r, "web")
+}
+func (s *Server) mobileLogin(w http.ResponseWriter, r *http.Request) error {
+	return s.loginClient(w, r, "mobile")
+}
+func invalidLogin() error {
+	return &apiError{401, "نام کاربری یا رمز عبور درست نیست / Incorrect username, email or password"}
+}
+func (s *Server) loginClient(w http.ResponseWriter, r *http.Request, client string) error {
+	var body struct{ Identifier, Email, Password string }
 	if err := readJSON(w, r, &body); err != nil {
 		return err
 	}
-	body.Email = strings.ToLower(strings.TrimSpace(body.Email))
-	key := body.Email
-	if !s.reserveLoginAttempt(key) {
-		return &apiError{429, "تلاش‌های زیادی انجام شده؛ ۱۵ دقیقه دیگر امتحان کنید / Too many attempts"}
+	identifier := strings.ToLower(strings.TrimSpace(body.Identifier))
+	if identifier == "" {
+		identifier = strings.ToLower(strings.TrimSpace(body.Email))
+	}
+	if identifier == "" || len(identifier) > 254 || len(body.Password) > 72 {
+		return invalidLogin()
 	}
 	var p Person
 	var hash string
-	err := s.db.QueryRow(r.Context(), "SELECT id,name,email,role,city,color,password_hash FROM people WHERE lower(email)=$1 AND active", body.Email).Scan(&p.ID, &p.Name, &p.Email, &p.Role, &p.City, &p.Color, &hash)
+	err := s.db.QueryRow(r.Context(), `SELECT id,name,email,COALESCE(username,''),role,city,color,password_hash FROM people WHERE (email=$1 OR username=$1) AND active`, identifier).Scan(&p.ID, &p.Name, &p.Email, &p.Username, &p.Role, &p.City, &p.Color, &hash)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
+	}
+	key := "login:" + identifier
+	if p.ID != "" {
+		key = p.ID
+	}
+	if !s.reserveLoginAttempt(key) {
+		return &apiError{429, "تلاش‌های زیادی انجام شده؛ ۱۵ دقیقه دیگر امتحان کنید / Too many attempts"}
 	}
 	if hash == "" {
 		hash = "$2a$10$4tPfh8P2xK5QEGb5bKglmuP1ECqZhyjAvmsZlBbSzrpqMk3DjN7EC"
 	}
 	match := bcrypt.CompareHashAndPassword([]byte(hash), []byte(body.Password)) == nil
 	if err != nil || !match {
-		return &apiError{401, "ایمیل یا رمز عبور درست نیست / Incorrect email or password"}
+		return invalidLogin()
 	}
 	s.attempts.Delete(key)
-	return s.session(w, r, p)
+	if client == "mobile" && p.Role != "supervisor" && p.Role != "sampler" {
+		return &apiError{403, "اپ میدانی برای سرپرست و سمپلر است / The field app is for supervisors and samplers"}
+	}
+	return s.session(w, r, p, client, hash)
 }
 func (s *Server) demoLogin(w http.ResponseWriter, r *http.Request) error {
 	if !s.cfg.Demo {
@@ -293,12 +358,10 @@ func (s *Server) demoLogin(w http.ResponseWriter, r *http.Request) error {
 	if err := s.db.QueryRow(r.Context(), "SELECT id,name,email,role,city,color FROM people WHERE id=$1 AND active", pid).Scan(&p.ID, &p.Name, &p.Email, &p.Role, &p.City, &p.Color); err != nil {
 		return err
 	}
-	return s.session(w, r, p)
+	return s.session(w, r, p, "web", "")
 }
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
-	c, _ := r.Cookie("sampling_session")
-	digest := sha256.Sum256([]byte(c.Value))
-	if _, err := s.db.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", hex.EncodeToString(digest[:])); err != nil {
+	if _, err := s.db.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", r.Context().Value(sessionKey)); err != nil {
 		return err
 	}
 	http.SetCookie(w, &http.Cookie{Name: "sampling_session", Value: "", Path: "/", HttpOnly: true, Secure: s.cfg.Production, SameSite: http.SameSiteLaxMode, MaxAge: -1})
@@ -309,7 +372,7 @@ func (s *Server) BootstrapAdmin(ctx context.Context, email, password string) err
 	if email == "" && password == "" {
 		return nil
 	}
-	if len(password) < 12 || !strings.Contains(email, "@") {
+	if !validPassword(password) || !strings.Contains(email, "@") {
 		return fmt.Errorf("ADMIN_EMAIL and a password of at least 12 characters are required")
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -320,7 +383,9 @@ func (s *Server) BootstrapAdmin(ctx context.Context, email, password string) err
 	return err
 }
 func audit(ctx context.Context, tx pgx.Tx, p Person, action, entity, entityID, detail string) error {
-	_, err := tx.Exec(ctx, "INSERT INTO audit_events(id,actor_id,action,entity_type,entity_id,detail) VALUES($1,$2,$3,$4,$5,$6)", id("event"), p.ID, action, entity, entityID, detail)
+	_, err := tx.Exec(ctx, `INSERT INTO audit_events(id,actor_id,action,entity_type,entity_id,detail,campaign_id)
+		VALUES($1,$2,$3,$4,$5,$6,CASE $4 WHEN 'campaign' THEN $5 WHEN 'shift' THEN (SELECT campaign_id FROM shifts WHERE id=$5) END)`,
+		id("event"), p.ID, action, entity, entityID, detail)
 	return err
 }
 func (s *Server) transaction(r *http.Request, fn func(pgx.Tx) error) error {
