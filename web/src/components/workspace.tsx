@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -51,6 +51,7 @@ import {
 } from "./records";
 import AppDialog from "./dialogs";
 import { CampaignDrawer, ShiftDrawer } from "./drawers";
+import { WorkspaceTour } from "./workspace-tour";
 
 const navItems: {
   view: View;
@@ -102,6 +103,7 @@ const navItems: {
   },
 ];
 export default function Workspace({ view }: { view: View }) {
+  const router = useRouter();
   const [data, setData] = useState<WorkspaceData | null>(null);
   const [locale, setLocaleState] = useState<Locale>("fa");
   const [loading, setLoading] = useState(true);
@@ -452,7 +454,13 @@ export default function Workspace({ view }: { view: View }) {
                   "From planning to the field, we're here.",
                 )}
               </p>
-              <button onClick={() => setDialog({ kind: "help" })}>
+              <button
+                onClick={() => {
+                  setMobileNav(false);
+                  router.push("/?tour=0");
+                  window.scrollTo({ top: 0 });
+                }}
+              >
                 {t("راهنمای شروع", "Take a quick tour")}
                 <ArrowUpRight size={15} />
               </button>
@@ -507,7 +515,7 @@ export default function Workspace({ view }: { view: View }) {
                 <strong>{t(heading.fa, heading.en)}</strong>
               </div>
             </div>
-            <div className="topbar-end">
+            <div className="topbar-end" data-tour="toolbar">
               <button
                 className="global-search"
                 aria-label={t("جست‌وجو در فضای کار", "Search workspace")}
@@ -545,6 +553,7 @@ export default function Workspace({ view }: { view: View }) {
               <span className="topbar-divider" />
               <button
                 className="topbar-avatar"
+                data-tour="account"
                 aria-label={t("حساب کاربری", "Your account")}
                 onClick={() => setDialog({ kind: "account" })}
               >
@@ -616,6 +625,9 @@ export default function Workspace({ view }: { view: View }) {
           </button>
         </div>
       )}
+      <Suspense fallback={null}>
+        <WorkspaceTour view={view} />
+      </Suspense>
     </Context.Provider>
   );
 }

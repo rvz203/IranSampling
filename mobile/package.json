@@ -11,7 +11,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "node --import tsx --test \"tests/*.test.ts\"",
     "bundle": "expo export --platform all --output-dir dist"
   },
   "dependencies": {

@@ -17,8 +17,15 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { useWorkspace } from "./context";
-import { api, dayKey, errorText, tehranDateTimeToISO } from "@/lib/api";
-import type { DialogState, Locale } from "@/lib/types";
+import {
+  api,
+  dayKey,
+  errorText,
+  tehranDateTimeField,
+  tehranDateTimeToISO,
+} from "@/lib/api";
+import type { DialogState, Locale, Shift } from "@/lib/types";
+import { ShiftSummaryPanel } from "./shift-operations";
 import {
   Avatar,
   Badge,
@@ -47,6 +54,7 @@ type Field = {
   options?: { value: string; label: string }[];
   wide?: boolean;
   hint?: string;
+  disabled?: boolean;
 };
 export function SubmitForm({
   fields,
@@ -114,6 +122,7 @@ export function SubmitForm({
             ) : f.options ? (
               <select
                 name={f.name}
+                disabled={f.disabled}
                 value={values[f.name] || ""}
                 required={f.required !== false}
                 onChange={(e) => {
@@ -136,6 +145,7 @@ export function SubmitForm({
             ) : (
               <input
                 name={f.name}
+                disabled={f.disabled}
                 type={f.type || "text"}
                 dir={
                   f.ltr ||
@@ -189,6 +199,140 @@ export function SubmitForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+function ShiftScheduleForm({ shift }: { shift: Shift }) {
+  const { data, t, mutate, n } = useWorkspace();
+  const [people, setPeople] = useState(shift.team.map((p) => p.id));
+  const attendance = data.attendance.filter((a) => a.shift_id === shift.id);
+  const plannedTime = (
+    name: string,
+    label: string,
+    time: string | null,
+    required: boolean,
+  ): Field => ({
+    name,
+    label,
+    type: "datetime-local",
+    default: time ? tehranDateTimeField(time) : "",
+    required,
+  });
+  const starts = plannedTime(
+    "starts_at",
+    t("شروع کار", "Work starts"),
+    shift.starts_at,
+    true,
+  );
+  const ends = plannedTime(
+    "ends_at",
+    t("پایان کار", "Work ends"),
+    shift.ends_at,
+    true,
+  );
+  const lunchStart = plannedTime(
+    "break_starts_at",
+    t("شروع استراحت", "Break starts"),
+    shift.break_starts_at,
+    false,
+  );
+  const lunchEnd = plannedTime(
+    "break_ends_at",
+    t("پایان استراحت", "Break ends"),
+    shift.break_ends_at,
+    false,
+  );
+  const breakStarted =
+    !!shift.break_starts_at &&
+    Date.parse(shift.break_starts_at) <= Date.parse(data.server_time) &&
+    attendance.length > 0;
+  const clockValue = (v: Values, field: Field, original: string | null) =>
+    v[field.name] === field.default
+      ? original
+      : v[field.name]
+        ? tehranDateTimeToISO(v[field.name])
+        : null;
+  const eligible = data.people.filter(
+    (p) =>
+      p.role === "sampler" &&
+      (p.active || shift.team.some((person) => person.id === p.id)),
+  );
+  return (
+    <SubmitForm
+      fields={[
+        { ...starts, disabled: attendance.length > 0 },
+        ends,
+        { ...lunchStart, disabled: breakStarted },
+        { ...lunchEnd, disabled: breakStarted },
+        {
+          name: "supervisor_id",
+          label: t("سرپرست شیفت", "Shift supervisor"),
+          default: shift.supervisor_id,
+          disabled: attendance.length > 0,
+          wide: true,
+          options: data.people
+            .filter(
+              (p) =>
+                p.role === "supervisor" &&
+                (p.active || p.id === shift.supervisor_id),
+            )
+            .map((p) => ({ value: p.id, label: p.name })),
+        },
+      ]}
+      action={(v) =>
+        mutate(
+          `/shifts/${shift.id}/schedule`,
+          {
+            starts_at: clockValue(v, starts, shift.starts_at),
+            ends_at: clockValue(v, ends, shift.ends_at),
+            break_starts_at: clockValue(v, lunchStart, shift.break_starts_at),
+            break_ends_at: clockValue(v, lunchEnd, shift.break_ends_at),
+            supervisor_id: v.supervisor_id,
+            person_ids: people,
+          },
+          "PATCH",
+        )
+      }
+      label={t("ذخیره برنامه و تیم", "Save schedule and team")}
+    >
+      <fieldset className="schedule-roster">
+        <legend>
+          {t("سمپلرهای شیفت", "Shift samplers")}{" "}
+          <span>
+            {n(people.length)} / {n(shift.required_staff)}
+          </span>
+        </legend>
+        <div className="schedule-roster-options">
+          {eligible.map((person) => {
+            const checked = people.includes(person.id);
+            return (
+              <label key={person.id}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={
+                    attendance.some((a) => a.person_id === person.id) ||
+                    (!checked && people.length >= shift.required_staff)
+                  }
+                  onChange={() =>
+                    setPeople((current) =>
+                      checked
+                        ? current.filter((id) => id !== person.id)
+                        : [...current, person.id],
+                    )
+                  }
+                />
+                <Avatar size="small" name={person.name} color={person.color} />
+                <span>
+                  <strong>{person.name}</strong>
+                  <small>{person.city}</small>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+    </SubmitForm>
   );
 }
 function InfoPair({ label, children }: { label: string; children: ReactNode }) {
@@ -483,6 +627,24 @@ export default function AppDialog({
           default: today + "T18:00",
           hint: t("به وقت تهران", "Tehran time"),
         },
+        ...(data.user.role === "admin"
+          ? [
+              {
+                name: "break_starts_at",
+                label: t("شروع استراحت ناهار", "Lunch starts"),
+                type: "datetime-local",
+                required: false,
+                hint: t("اختیاری · به وقت تهران", "Optional · Tehran time"),
+              },
+              {
+                name: "break_ends_at",
+                label: t("پایان استراحت ناهار", "Lunch ends"),
+                type: "datetime-local",
+                required: false,
+                hint: t("اختیاری · به وقت تهران", "Optional · Tehran time"),
+              },
+            ]
+          : []),
         {
           name: "target",
           label: t("هدف توزیع", "Distribution target"),
@@ -515,6 +677,12 @@ export default function AppDialog({
               ...v,
               starts_at: tehranDateTimeToISO(v.starts_at),
               ends_at: tehranDateTimeToISO(v.ends_at),
+              break_starts_at: v.break_starts_at
+                ? tehranDateTimeToISO(v.break_starts_at)
+                : null,
+              break_ends_at: v.break_ends_at
+                ? tehranDateTimeToISO(v.break_ends_at)
+                : null,
               target: Number(v.target),
               required_staff: Number(v.required_staff),
             })
@@ -524,6 +692,36 @@ export default function AppDialog({
       );
       break;
     }
+    case "shift-schedule": {
+      const shift = data.shifts.find((item) => item.id === state.id);
+      title = t("ویرایش برنامه و تیم شیفت", "Edit shift schedule and team");
+      description = t(
+        "ساعات کار و استراحت به وقت تهران است و برای همه اعضای شیفت اعمال می‌شود.",
+        "Working and break hours use Tehran time and apply to everyone on this shift.",
+      );
+      if (shift && data.user.role === "admin")
+        content = <ShiftScheduleForm shift={shift} />;
+      break;
+    }
+    case "shift-end":
+      title = t("پایان شیفت", "End shift");
+      description = t(
+        "با پایان شیفت، ثبت حضور باز بسته می‌شود، اشتراک موقعیت متوقف می‌شود و گزارش خودکار ثبت خواهد شد.",
+        "Ending the shift closes open attendance, stops location sharing, and creates an automatic report.",
+      );
+      content = (
+        <SubmitForm
+          fields={[]}
+          action={() => submit(`/shifts/${state.id}/end`, {})}
+          label={t("پایان و ساخت گزارش", "End shift and create report")}
+        />
+      );
+      break;
+    case "shift-summary":
+      title = t("گزارش پایان اجرا", "Shift closeout report");
+      wide = true;
+      if (state.id) content = <ShiftSummaryPanel shiftId={state.id} />;
+      break;
     case "location":
       title = t("یک نقطه جدید روی نقشه", "A new point on the map");
       description = t(

@@ -21,7 +21,7 @@ test("complete field lifecycle: staffing, GPS, stock, evidence, issues, report r
   page,
   browser,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(420_000);
   await login(page);
   const email = `field-${Date.now()}@example.test`,
     password = "QaPassword12345!",

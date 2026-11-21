@@ -1,9 +1,10 @@
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
-import { fieldApi } from "./api";
+import { fieldApi, RequestError } from "./api";
 import {
   LOCATION_PERIOD_MS,
   sampleForSession,
+  trackingPhase,
   usableGeo,
 } from "./location-policy";
 import { flushOutbox } from "./outbox";
@@ -70,18 +71,53 @@ function expired(auth: Identity, state: TrackingState) {
   );
 }
 
+async function refreshSchedule(auth: Identity, state: TrackingState) {
+  const checkedAt = Date.now();
+  if (checkedAt - (state.scheduleCheckedAt ?? 0) < LOCATION_PERIOD_MS)
+    return state;
+  await storage.patchTrackingSchedule(auth, state, {
+    scheduleCheckedAt: checkedAt,
+  });
+  state.scheduleCheckedAt = checkedAt;
+  try {
+    const schedule = await fieldApi.trackingSchedule(auth, state.id);
+    const clockOffset =
+      Date.parse(schedule.server_time) -
+      Math.round((checkedAt + Date.now()) / 2);
+    await storage.patchTrackingSchedule(auth, state, {
+      ...schedule,
+      clockOffset,
+    });
+    return { ...state, ...schedule, clockOffset };
+  } catch (error) {
+    if (
+      error instanceof RequestError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      await stopSharing(auth, false);
+      return null;
+    }
+    return state;
+  }
+}
+
 async function queueLocations(
   auth: Identity,
   locations: Location.LocationObject[],
 ) {
-  const state = await storage.tracking(auth);
+  const saved = await storage.tracking(auth);
+  const state = saved && (await refreshSchedule(auth, saved));
   if (!state) {
     await stopNativeTracking();
     return;
   }
   // iOS can deliver multiple fixes together after device sleep.
   for (const position of locations.sort((a, b) => a.timestamp - b.timestamp)) {
-    if (position.mocked) continue;
+    if (
+      position.mocked ||
+      trackingPhase(state, position.timestamp + state.clockOffset) !== "working"
+    )
+      continue;
     const entry = sampleForSession(
       state,
       fixFrom(position),
@@ -138,6 +174,7 @@ export async function beginSharing(
     clockOffset,
     background: false,
     lastBucket: null,
+    scheduleCheckedAt: Date.now(),
   };
   try {
     await storage.activate(auth, state);
@@ -160,7 +197,7 @@ export async function beginSharing(
         foregroundService: {
           notificationTitle: "اشتراک موقعیت شیفت فعال است",
           notificationBody:
-            "برای توقف یا دیدن صف ارسال، اپ ایران سمپلینگ را باز کنید.",
+            "ثبت بر اساس ساعات کار انجام می‌شود و در استراحت متوقف است.",
           notificationColor: "#273b30",
           killServiceOnDestroy: true,
         },
@@ -176,7 +213,8 @@ export async function beginSharing(
 }
 
 export async function reconcileTracking(auth: Identity) {
-  const state = await storage.tracking(auth);
+  const saved = await storage.tracking(auth);
+  const state = saved && (await refreshSchedule(auth, saved));
   if (!state) {
     await stopNativeTracking().catch(() => {});
     return null;
@@ -197,7 +235,11 @@ export async function reconcileTracking(auth: Identity) {
 
 export async function collectForeground(auth: Identity) {
   const state = await reconcileTracking(auth);
-  if (!state) return;
+  if (
+    !state ||
+    trackingPhase(state, Date.now() + state.clockOffset) !== "working"
+  )
+    return;
   const position = await currentPosition();
   await queueLocations(auth, [position]);
 }

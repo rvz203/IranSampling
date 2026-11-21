@@ -17,6 +17,7 @@ type Point = {
   person_id: string;
   person_name: string;
   role: "sampler" | "supervisor";
+  state?: "working" | "break" | "before_work";
   shift_id: string;
   location_name: string;
   latitude: number | null;
@@ -100,6 +101,7 @@ export function LiveTeamMap({ campaign = "" }: { campaign?: string }) {
   const activeShifts = data.shifts.filter(
     (item) =>
       item.status === "active" &&
+      !item.ended_at &&
       (!campaign || item.campaign_id === campaign) &&
       (data.user.role === "admin" || item.supervisor_id === data.user.id),
   );
@@ -196,8 +198,12 @@ export function LiveTeamMap({ campaign = "" }: { campaign?: string }) {
               {!plotted.length && (
                 <span className="live-team-no-fix">
                   {t(
-                    "منتظر اولین نمونه موقعیت",
-                    "Waiting for the first location fix",
+                    points.every((point) => point.state === "break")
+                      ? "ثبت موقعیت در استراحت متوقف است"
+                      : "منتظر نمونه موقعیت",
+                    points.every((point) => point.state === "break")
+                      ? "Location recording is paused for lunch"
+                      : "Waiting for location fixes",
                   )}
                 </span>
               )}
@@ -257,11 +263,15 @@ export function LiveTeamMap({ campaign = "" }: { campaign?: string }) {
                   <span
                     className={`live-team-status ${fresh(point) ? "fresh" : ""}`}
                   >
-                    {fresh(point)
-                      ? t("به‌روز", "Fresh")
-                      : point.captured_at
-                        ? t("آخرین موقعیت", "Last known")
-                        : t("در انتظار موقعیت", "Waiting for fix")}
+                    {point.state === "break"
+                      ? t("استراحت ناهار", "Lunch break")
+                      : point.state === "before_work"
+                        ? t("پیش از شروع کار", "Before working hours")
+                        : fresh(point)
+                          ? t("به‌روز", "Fresh")
+                          : point.captured_at
+                            ? t("آخرین موقعیت", "Last known")
+                            : t("در انتظار موقعیت", "Waiting for fix")}
                   </span>
                 </div>
                 <div className="live-team-actions">

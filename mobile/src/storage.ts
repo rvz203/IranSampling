@@ -117,8 +117,22 @@ export const storage = {
     await (
       await db()
     ).runAsync(
-      "UPDATE tracking SET data=? WHERE account=? AND id=?",
-      JSON.stringify(state),
+      "UPDATE tracking SET data=json_set(data,'$.background',json(?)) WHERE account=? AND id=?",
+      JSON.stringify(state.background),
+      accountKey(auth),
+      state.id,
+    );
+  },
+  async patchTrackingSchedule(
+    auth: Identity,
+    state: TrackingState,
+    patch: Partial<TrackingState>,
+  ) {
+    await (
+      await db()
+    ).runAsync(
+      "UPDATE tracking SET data=json_patch(data,?) WHERE account=? AND id=?",
+      JSON.stringify(patch),
       accountKey(auth),
       state.id,
     );

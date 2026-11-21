@@ -25,6 +25,9 @@ export type Shift = {
   longitude: number;
   starts_at: string;
   ends_at: string;
+  break_starts_at?: string | null;
+  break_ends_at?: string | null;
+  ended_at?: string | null;
   status: "active" | "scheduled" | "completed";
   supervisor_id: string;
   supervisor_name: string;
@@ -44,6 +47,7 @@ export type Attendance = {
   person_name: string;
   checked_in_at: string;
   checked_out_at: string | null;
+  ended_automatically?: boolean;
 };
 export type Priority = "low" | "medium" | "high" | "urgent";
 export type Issue = {
@@ -62,6 +66,26 @@ export type Report = {
   summary: string;
   feedback: string;
   submitted_name: string;
+};
+export type ShiftSummary = {
+  generated_at: string;
+  ended_at: string;
+  metrics: {
+    target: number;
+    distributed: number;
+    remaining: number;
+    photo_count: number;
+    open_issues: number;
+    team: {
+      id: string;
+      name: string;
+      role: User["role"];
+      checked_in_at?: string | null;
+      checked_out_at?: string | null;
+      ended_automatically?: boolean;
+      work_minutes?: number;
+    }[];
+  };
 };
 export type Photo = {
   id: string;
@@ -116,16 +140,21 @@ export type TrackingSession = {
   started_at: string;
   expires_at: string;
   server_time: string;
+  work_starts_at?: string;
+  break_starts_at?: string | null;
+  break_ends_at?: string | null;
 };
 export type TrackingState = TrackingSession & {
   clockOffset: number;
   background: boolean;
   lastBucket: number | null;
+  scheduleCheckedAt?: number;
 };
 export type LivePoint = {
   person_id: string;
   person_name: string;
   role: User["role"];
+  state?: "working" | "break" | "before_work";
   shift_id: string;
   location_name: string;
   captured_at: string | null;

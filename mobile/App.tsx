@@ -19,7 +19,11 @@ import NetInfo from "@react-native-community/netinfo";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { fieldApi, RequestError, signIn } from "./src/api";
 import { parseOrigin } from "./src/origin";
-import { LOCATION_PERIOD_MS } from "./src/location-policy";
+import {
+  LOCATION_PERIOD_MS,
+  nextTrackingBoundary,
+  trackingPhase,
+} from "./src/location-policy";
 import { flushOutbox } from "./src/outbox";
 import { ShiftCard, ShiftScreen } from "./src/ShiftScreen";
 import {
@@ -296,11 +300,15 @@ function LiveTeam({
               </Text>
               <Badge
                 label={
-                  fresh
-                    ? "به‌روز"
-                    : point.captured_at
-                      ? "آخرین موقعیت"
-                      : "منتظر اولین نمونه"
+                  point.state === "break"
+                    ? "استراحت"
+                    : point.state === "before_work"
+                      ? "پیش از شروع کار"
+                      : fresh
+                        ? "به‌روز"
+                        : point.captured_at
+                          ? "آخرین موقعیت"
+                          : "منتظر اولین نمونه"
                 }
                 tone={fresh ? "green" : "amber"}
               />
@@ -353,6 +361,7 @@ function FieldApp() {
   const refreshingRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const collecting = useRef(false);
+  const pollTracking = useRef<() => void>(() => {});
   const scroll = useRef<ScrollView>(null);
   const update = useFieldUpdate(
     loaded &&
@@ -505,6 +514,7 @@ function FieldApp() {
       }
       void refresh();
     };
+    pollTracking.current = poll;
     poll();
     const listener = AppState.addEventListener("change", (state) => {
       if (state === "active") poll();
@@ -520,11 +530,21 @@ function FieldApp() {
     const timer = setInterval(poll, LOCATION_PERIOD_MS);
     return () => {
       disposed = true;
+      pollTracking.current = () => {};
       clearInterval(timer);
       network();
       listener.remove();
     };
   }, [auth, refresh, snapshot, sync]);
+
+  useEffect(() => {
+    if (!track) return;
+    const now = Date.now();
+    const boundary = nextTrackingBoundary(track, now);
+    if (boundary == null) return;
+    const timer = setTimeout(() => pollTracking.current(), boundary - now + 10);
+    return () => clearTimeout(timer);
+  }, [track]);
 
   const run = (key: string, action: () => Promise<void>) => {
     if (busyRef.current) return;
@@ -602,7 +622,8 @@ function FieldApp() {
   const ordered = [...(data?.shifts ?? [])].sort((a, b) => {
     const rank = { active: 0, scheduled: 1, completed: 2 };
     return (
-      rank[a.status] - rank[b.status] ||
+      (a.ended_at ? rank.completed : rank[a.status]) -
+        (b.ended_at ? rank.completed : rank[b.status]) ||
       Date.parse(b.starts_at) - Date.parse(a.starts_at)
     );
   });
@@ -638,6 +659,7 @@ function FieldApp() {
     setNotice("ثبت موقعیت روی دستگاه متوقف شد.");
     await sync();
   };
+  const phase = track && trackingPhase(track, Date.now() + track.clockOffset);
   return (
     <>
       <View style={local.header}>
@@ -668,7 +690,18 @@ function FieldApp() {
           />
           {track && (
             <Pressable accessibilityRole="button" onPress={() => jump("queue")}>
-              <Badge label="اشتراک موقعیت فعال" tone="green" />
+              <Badge
+                label={
+                  phase === "break"
+                    ? "توقف در استراحت"
+                    : phase === "before_work"
+                      ? "در انتظار شروع کار"
+                      : phase === "ended"
+                        ? "اشتراک پایان یافت"
+                        : "اشتراک موقعیت فعال"
+                }
+                tone={phase === "working" ? "green" : "neutral"}
+              />
             </Pressable>
           )}
         </View>

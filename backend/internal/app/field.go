@@ -51,17 +51,19 @@ func (s *Server) attendancePosition(r *http.Request, tx pgx.Tx, b geoBody, arriv
 	var start, end time.Time
 	var assigned bool
 	var status string
+	var ended *time.Time
 	p := current(r)
-	if err := tx.QueryRow(r.Context(), `SELECT l.latitude,l.longitude,l.radius,s.starts_at,s.ends_at, CASE WHEN $3='supervisor' THEN s.supervisor_id=$2 WHEN $3='sampler' THEN EXISTS(SELECT 1 FROM assignments a WHERE a.shift_id=s.id AND a.person_id=$2) ELSE false END,s.status FROM shifts s JOIN locations l ON l.id=s.location_id WHERE s.id=$1 FOR UPDATE OF s`, r.PathValue("id"), p.ID, p.Role).Scan(&lat, &lon, &radius, &start, &end, &assigned, &status); err != nil {
+	if err := tx.QueryRow(r.Context(), `SELECT l.latitude,l.longitude,l.radius,s.starts_at,s.ends_at, CASE WHEN $3='supervisor' THEN s.supervisor_id=$2 WHEN $3='sampler' THEN EXISTS(SELECT 1 FROM assignments a WHERE a.shift_id=s.id AND a.person_id=$2) ELSE false END,s.status,s.ended_at FROM shifts s JOIN locations l ON l.id=s.location_id WHERE s.id=$1 FOR UPDATE OF s`, r.PathValue("id"), p.ID, p.Role).Scan(&lat, &lon, &radius, &start, &end, &assigned, &status, &ended); err != nil {
 		return err
 	}
 	if !assigned {
 		return forbidden()
 	}
-	if status == "completed" {
+	if status == "completed" || ended != nil {
 		return bad("شیفت پایان یافته است / Shift is completed")
 	}
-	if arrival && (time.Now().Before(start.Add(-time.Hour)) || time.Now().After(end.Add(2*time.Hour))) {
+	now := time.Now()
+	if arrival && (now.Before(start.Add(-time.Hour)) || !now.Before(end)) {
 		return bad("ثبت حضور خارج از بازه شیفت مجاز نیست / Attendance is outside the shift window")
 	}
 	if distanceMeters(lat, lon, b.Latitude, b.Longitude) > float64(radius) {
@@ -354,6 +356,13 @@ func (s *Server) reviewReport(w http.ResponseWriter, r *http.Request) error {
 				return bad("ابتدا مشکلات فوری را حل کنید / Resolve urgent issues before approval")
 			}
 			if _, err := tx.Exec(r.Context(), "UPDATE shifts SET status='completed' WHERE id=$1", sid); err != nil {
+				return err
+			}
+			var endedAt time.Time
+			if err := tx.QueryRow(r.Context(), "SELECT LEAST(ends_at,clock_timestamp()) FROM shifts WHERE id=$1", sid).Scan(&endedAt); err != nil {
+				return err
+			}
+			if err := closeShift(r.Context(), tx, sid, endedAt); err != nil {
 				return err
 			}
 		}

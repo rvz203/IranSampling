@@ -150,7 +150,7 @@ export default function Overview() {
   const total = data.trend.slice(-days).reduce((s, d) => s + d.distributed, 0);
   return (
     <>
-      <section className="command-hero">
+      <section className="command-hero" data-tour="page">
         <div className="command-copy">
           <span className="hero-kicker">
             <span className="square-dot" />

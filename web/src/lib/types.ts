@@ -6,13 +6,43 @@ export type Brand = { id: string; name: string; customer_id: string; color: stri
 export type Product = { id: string; name: string; brand_id: string; unit: string };
 export type Campaign = { id: string; name: string; brand_id: string; product_id: string; status: string; start_date: string; end_date: string; target: number; description: string; brand_name: string; product_name: string; customer_name: string; color: string; distributed: number; points: number };
 export type Location = { id: string; name: string; city: string; address: string; latitude: number; longitude: number; radius: number };
-export type Shift = { id: string; campaign_id: string; location_id: string; supervisor_id: string; starts_at: string; ends_at: string; target: number; required_staff: number; instructions: string; ready: boolean; status: string; campaign_name: string; brand_name: string; color: string; location_name: string; city: string; address: string; latitude: number; longitude: number; radius: number; supervisor_name: string; team: { id: string; name: string; color: string; confirmed: boolean }[]; distributed: number; remaining: number; received: number; damaged: number; returned: number; present: number; report_status: string | null };
-export type Attendance = { id: string; shift_id: string; person_id: string; person_name: string; checked_in_at: string; checked_out_at: string | null; in_accuracy: number; in_latitude: number; in_longitude: number; location_name: string; campaign_name: string };
+export type Shift = { id: string; campaign_id: string; location_id: string; supervisor_id: string; starts_at: string; ends_at: string; break_starts_at: string | null; break_ends_at: string | null; ended_at: string | null; target: number; required_staff: number; instructions: string; ready: boolean; status: string; campaign_name: string; brand_name: string; color: string; location_name: string; city: string; address: string; latitude: number; longitude: number; radius: number; supervisor_name: string; team: { id: string; name: string; color: string; confirmed: boolean }[]; distributed: number; remaining: number; received: number; damaged: number; returned: number; present: number; report_status: string | null };
+export type Attendance = { id: string; shift_id: string; person_id: string; person_name: string; checked_in_at: string; checked_out_at: string | null; ended_automatically: boolean; in_accuracy: number; in_latitude: number; in_longitude: number; location_name: string; campaign_name: string };
 export type Stock = { id: string; shift_id: string; person_id: string; kind: string; quantity: number; note: string; created_at: string; person_name: string; location_name: string; campaign_name: string };
 export type Report = { id: string; shift_id: string; submitted_by: string; summary: string; status: string; submitted_at: string; reviewed_at: string | null; feedback: string; submitted_name: string; location_name: string; city: string; campaign_name: string; brand_name: string };
+export type ShiftSummaryEntry = {
+  shift_id: string;
+  generated_at: string;
+  ended_at: string;
+  location_name: string;
+  campaign_name: string;
+  distributed: number;
+  team_count: number;
+};
+export type ShiftSummary = Pick<ShiftSummaryEntry, "generated_at" | "ended_at"> & {
+  metrics: {
+    target: number;
+    distributed: number;
+    received: number;
+    damaged: number;
+    returned: number;
+    remaining: number;
+    photo_count: number;
+    open_issues: number;
+    team: {
+      id: string;
+      name: string;
+      role: Role;
+      checked_in_at?: string | null;
+      checked_out_at?: string | null;
+      ended_automatically?: boolean;
+      work_minutes?: number;
+    }[];
+  };
+};
 export type Issue = { id: string; shift_id: string; title: string; description: string; priority: string; status: string; owner_id: string; owner_name: string; created_at: string; updated_at: string; location_name: string; city: string; campaign_name: string };
 export type Evidence = { id: string; shift_id: string; person_id: string; original_name: string; caption: string; created_at: string; person_name: string; location_name: string };
 export type AuditEvent = { id: string; actor_id: string; action: string; entity_type: string; entity_id: string; detail: string; created_at: string; actor_name: string; color: string };
-export type WorkspaceData = { user: Person; demo: boolean; map_available?: boolean; server_time: string; customers: Customer[]; brands: Brand[]; products: Product[]; campaigns: Campaign[]; locations: Location[]; people: Person[]; shifts: Shift[]; attendance: Attendance[]; stock: Stock[]; reports: Report[]; issues: Issue[]; evidence: Evidence[]; events: AuditEvent[]; trend: { date: string; distributed: number }[] };
+export type WorkspaceData = { user: Person; demo: boolean; map_available?: boolean; server_time: string; customers: Customer[]; brands: Brand[]; products: Product[]; campaigns: Campaign[]; locations: Location[]; people: Person[]; shifts: Shift[]; attendance: Attendance[]; stock: Stock[]; reports: Report[]; shift_summaries?: ShiftSummaryEntry[]; issues: Issue[]; evidence: Evidence[]; events: AuditEvent[]; trend: { date: string; distributed: number }[] };
 export type View = "overview" | "campaigns" | "shifts" | "map" | "team" | "attendance" | "inventory" | "issues" | "reports" | "catalog";
 export type DialogState = { kind: string; id?: string; subtype?: string } | null;

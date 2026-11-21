@@ -71,7 +71,7 @@ export function PageHeading({
   };
   const page = pages[eyebrow as keyof typeof pages];
   return (
-    <section className={`page-heading ${page ? "page-hero" : ""}`}>
+    <section className={`page-heading ${page ? "page-hero" : ""}`} data-tour="page">
       <div className="page-hero-copy">
         {eyebrow && (
           <span className="eyebrow">

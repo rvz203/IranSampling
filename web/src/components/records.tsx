@@ -20,6 +20,7 @@ import { useWorkspace } from "./context";
 import { Arrow, Avatar, Badge, Button, CardHeading, Empty, Select } from "./ui";
 import { CollectionBar, DataTable, PageHeading } from "./collections";
 import { dayKey } from "@/lib/api";
+import { GeneratedShiftReports } from "./shift-operations";
 import {
   AttendanceInsight,
   StockOverview,
@@ -183,7 +184,15 @@ export function AttendanceView() {
             {
               label: t("وضعیت", "Status"),
               render: (a) => (
-                <Badge value={a.checked_out_at ? "out" : "present"} />
+                <Badge
+                  value={
+                    a.ended_automatically
+                      ? "auto_out"
+                      : a.checked_out_at
+                        ? "out"
+                        : "present"
+                  }
+                />
               ),
             },
           ]}
@@ -596,6 +605,11 @@ export function ReportsView() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [layout, setLayout] = useState("grid");
+  const [kind, setKind] = useState<"reviews" | "automatic">("reviews");
+  const generated = data.shift_summaries ?? [];
+  const generatedRows = generated.filter((r) =>
+    [r.campaign_name, r.location_name].some((v) => v.includes(q)),
+  );
   const rows = data.reports.filter(
     (r) =>
       (status === "all" || r.status === status) &&
@@ -624,123 +638,172 @@ export function ReportsView() {
           )
         }
       />
-      <div className="mini-stat-grid">
-        <MiniStat
-          label={t("در انتظار بررسی", "Pending review")}
-          action={() => setStatus("pending")}
-          value={n(data.reports.filter((r) => r.status === "pending").length)}
-          icon={Clock3}
-        />
-        <MiniStat
-          label={t("تأییدشده", "Approved")}
-          action={() => setStatus("approved")}
-          value={n(data.reports.filter((r) => r.status === "approved").length)}
-          icon={ShieldCheck}
-        />
-        <MiniStat
-          label={t("برگشت برای اصلاح", "Returned")}
-          action={() => setStatus("returned")}
-          value={n(data.reports.filter((r) => r.status === "returned").length)}
-          icon={FileText}
-        />
-      </div>
-      <article className="card">
-        <CollectionBar
-          query={q}
-          setQuery={setQ}
-          count={rows.length}
-          placeholder={t(
-            "جست‌وجوی گزارش، کمپین یا نقطه…",
-            "Search reports, campaigns, or locations…",
-          )}
+      <div
+        className="report-kind-switch"
+        role="group"
+        aria-label={t("نوع گزارش", "Report type")}
+      >
+        <button
+          type="button"
+          aria-pressed={kind === "reviews"}
+          onClick={() => setKind("reviews")}
         >
-          <Select
-            aria-label={t("وضعیت گزارش", "Report status")}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="all">{t("همه گزارش‌ها", "All reports")}</option>
-            <option value="pending">
-              {t("در انتظار بررسی", "Pending review")}
-            </option>
-            <option value="approved">{t("تأییدشده", "Approved")}</option>
-            <option value="returned">
-              {t("برگشت برای اصلاح", "Returned")}
-            </option>
-          </Select>
-          <ViewSwitcher value={layout} onChange={setLayout} />
-        </CollectionBar>
-        {layout === "grid" ? (
-          <ReportCards rows={rows} />
-        ) : (
-          <DataTable
-            rows={rows}
-            columns={[
-              {
-                label: t("گزارش شیفت", "Shift report"),
-                render: (r) => (
-                  <button
-                    className="cell-link"
-                    onClick={() => open({ kind: "report-detail", id: r.id })}
-                  >
-                    {r.location_name}
-                    <small>{r.campaign_name}</small>
-                  </button>
-                ),
-              },
-              {
-                label: t("ثبت‌کننده", "Submitted by"),
-                render: (r) => (
-                  <div className="person-cell">
-                    <Avatar name={r.submitted_name} size="small" />
-                    {r.submitted_name}
-                  </div>
-                ),
-              },
-              {
-                label: t("تاریخ ارسال", "Submitted"),
-                render: (r) =>
-                  date(r.submitted_at, { day: "numeric", month: "short" }),
-              },
-              {
-                label: t("شواهد", "Evidence"),
-                render: (r) =>
-                  n(
-                    data.evidence.filter((e) => e.shift_id === r.shift_id)
-                      .length,
-                  ) +
-                  " " +
-                  t("تصویر", "photos"),
-              },
-              {
-                label: t("وضعیت", "Status"),
-                render: (r) => <Badge value={r.status} />,
-              },
-              {
-                label: t("بررسی", "Review"),
-                render: (r) =>
-                  r.status === "pending" && reviewer ? (
-                    <button
-                      className="button review-button"
-                      onClick={() => open({ kind: "review", id: r.id })}
-                    >
-                      {t("بررسی گزارش", "Review report")}
-                      <Arrow size={14} />
-                    </button>
-                  ) : (
-                    <button
-                      className="text-button"
-                      onClick={() => open({ kind: "report-detail", id: r.id })}
-                    >
-                      {t("مشاهده", "View")}
-                      <Arrow size={14} />
-                    </button>
-                  ),
-              },
-            ]}
+          <ClipboardCheck size={18} /> {t("گزارش‌های بررسی", "Review reports")}
+        </button>
+        <button
+          type="button"
+          aria-pressed={kind === "automatic"}
+          onClick={() => setKind("automatic")}
+        >
+          <FileCheck2 size={18} />{" "}
+          {t("خلاصه‌های خودکار", "Automatic summaries")}{" "}
+          <span>{n(generated.length)}</span>
+        </button>
+      </div>
+      {kind === "automatic" ? (
+        <article className="card">
+          <CollectionBar
+            query={q}
+            setQuery={setQ}
+            count={generatedRows.length}
+            placeholder={t(
+              "جست‌وجوی کمپین یا نقطه…",
+              "Search campaigns or locations…",
+            )}
           />
-        )}
-      </article>
+          <GeneratedShiftReports rows={generatedRows} />
+        </article>
+      ) : (
+        <>
+          <div className="mini-stat-grid">
+            <MiniStat
+              label={t("در انتظار بررسی", "Pending review")}
+              action={() => setStatus("pending")}
+              value={n(
+                data.reports.filter((r) => r.status === "pending").length,
+              )}
+              icon={Clock3}
+            />
+            <MiniStat
+              label={t("تأییدشده", "Approved")}
+              action={() => setStatus("approved")}
+              value={n(
+                data.reports.filter((r) => r.status === "approved").length,
+              )}
+              icon={ShieldCheck}
+            />
+            <MiniStat
+              label={t("برگشت برای اصلاح", "Returned")}
+              action={() => setStatus("returned")}
+              value={n(
+                data.reports.filter((r) => r.status === "returned").length,
+              )}
+              icon={FileText}
+            />
+          </div>
+          <article className="card">
+            <CollectionBar
+              query={q}
+              setQuery={setQ}
+              count={rows.length}
+              placeholder={t(
+                "جست‌وجوی گزارش، کمپین یا نقطه…",
+                "Search reports, campaigns, or locations…",
+              )}
+            >
+              <Select
+                aria-label={t("وضعیت گزارش", "Report status")}
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="all">{t("همه گزارش‌ها", "All reports")}</option>
+                <option value="pending">
+                  {t("در انتظار بررسی", "Pending review")}
+                </option>
+                <option value="approved">{t("تأییدشده", "Approved")}</option>
+                <option value="returned">
+                  {t("برگشت برای اصلاح", "Returned")}
+                </option>
+              </Select>
+              <ViewSwitcher value={layout} onChange={setLayout} />
+            </CollectionBar>
+            {layout === "grid" ? (
+              <ReportCards rows={rows} />
+            ) : (
+              <DataTable
+                rows={rows}
+                columns={[
+                  {
+                    label: t("گزارش شیفت", "Shift report"),
+                    render: (r) => (
+                      <button
+                        className="cell-link"
+                        onClick={() =>
+                          open({ kind: "report-detail", id: r.id })
+                        }
+                      >
+                        {r.location_name}
+                        <small>{r.campaign_name}</small>
+                      </button>
+                    ),
+                  },
+                  {
+                    label: t("ثبت‌کننده", "Submitted by"),
+                    render: (r) => (
+                      <div className="person-cell">
+                        <Avatar name={r.submitted_name} size="small" />
+                        {r.submitted_name}
+                      </div>
+                    ),
+                  },
+                  {
+                    label: t("تاریخ ارسال", "Submitted"),
+                    render: (r) =>
+                      date(r.submitted_at, { day: "numeric", month: "short" }),
+                  },
+                  {
+                    label: t("شواهد", "Evidence"),
+                    render: (r) =>
+                      n(
+                        data.evidence.filter((e) => e.shift_id === r.shift_id)
+                          .length,
+                      ) +
+                      " " +
+                      t("تصویر", "photos"),
+                  },
+                  {
+                    label: t("وضعیت", "Status"),
+                    render: (r) => <Badge value={r.status} />,
+                  },
+                  {
+                    label: t("بررسی", "Review"),
+                    render: (r) =>
+                      r.status === "pending" && reviewer ? (
+                        <button
+                          className="button review-button"
+                          onClick={() => open({ kind: "review", id: r.id })}
+                        >
+                          {t("بررسی گزارش", "Review report")}
+                          <Arrow size={14} />
+                        </button>
+                      ) : (
+                        <button
+                          className="text-button"
+                          onClick={() =>
+                            open({ kind: "report-detail", id: r.id })
+                          }
+                        >
+                          {t("مشاهده", "View")}
+                          <Arrow size={14} />
+                        </button>
+                      ),
+                  },
+                ]}
+              />
+            )}
+          </article>
+        </>
+      )}
     </>
   );
 }

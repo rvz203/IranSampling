@@ -177,7 +177,9 @@ export function ShiftsView() {
   const [scope, setScope] = useState(
     data.shifts.some((s) => dayKey(s.starts_at) === dayKey(data.server_time))
       ? "today"
-      : "active",
+      : data.shifts.some((s) => s.status === "active" && !s.ended_at)
+        ? "active"
+        : "all",
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [layout, setLayout] = useState("grid");
@@ -186,11 +188,15 @@ export function ShiftsView() {
     (s) =>
       (scope === "all" ||
         (scope === "today" && dayKey(s.starts_at) === today) ||
-        scope === s.status) &&
+        scope === (s.ended_at ? "completed" : s.status)) &&
       (!selectedDate || dayKey(s.starts_at) === selectedDate) &&
-      [s.campaign_name, s.location_name, s.city, s.supervisor_name].some((v) =>
-        v.includes(q),
-      ),
+      [
+        s.campaign_name,
+        s.location_name,
+        s.city,
+        s.supervisor_name,
+        ...s.team.map((p) => p.name),
+      ].some((v) => v.includes(q)),
   );
   return (
     <>
@@ -285,7 +291,18 @@ export function ShiftsView() {
             <article className="card shift-card" key={s.id}>
               <div className="shift-card-top">
                 <span className={`brand-label ${s.color}`}>{s.brand_name}</span>
-                <Badge value={s.status} />
+                <Badge value={s.ended_at ? "completed" : s.status} />
+              </div>
+              <div className="shift-card-program">
+                <span>
+                  <Users size={14} /> {s.supervisor_name}
+                </span>
+                {s.break_starts_at && s.break_ends_at && (
+                  <span>
+                    <Clock3 size={14} /> {t("ناهار", "Lunch")}{" "}
+                    {time(s.break_starts_at)} – {time(s.break_ends_at)}
+                  </span>
+                )}
               </div>
               <button className="shift-title" onClick={() => selectShift(s.id)}>
                 <h2>{s.location_name}</h2>
@@ -389,7 +406,9 @@ export function ShiftsView() {
               },
               {
                 label: t("وضعیت", "Status"),
-                render: (s) => <Badge value={s.status} />,
+                render: (s) => (
+                  <Badge value={s.ended_at ? "completed" : s.status} />
+                ),
               },
               {
                 label: t("جزئیات", "Details"),
@@ -466,7 +485,7 @@ export function MapView() {
             value: n(
               new Set(
                 scopedShifts
-                  .filter((s) => s.status === "active")
+                  .filter((s) => s.status === "active" && !s.ended_at)
                   .map((s) => s.location_id),
               ).size,
             ),

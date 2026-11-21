@@ -72,6 +72,7 @@ export async function deliverBatch(
                 ![
                   "stored",
                   "duplicate",
+                  "break",
                   "outside_window",
                   "invalid_fix",
                 ].includes(value),

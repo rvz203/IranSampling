@@ -9,7 +9,7 @@
   const iranBounds = [[43.7, 23.8], [63.6, 40.3]];
   const markers = new Map();
   let map;
-  let snapshot = { points: [], language: "fa" };
+  let snapshot = { points: [], routes: [], language: "fa" };
   let fitKey = "";
   let previousSelection;
 
@@ -84,9 +84,12 @@
         zoom: Math.max(map.getZoom(), 15),
       });
     } else if (nextFit !== fitKey) {
-      if (points.length) {
+      if (points.length || snapshot.routes.length) {
         const bounds = new maplibre.LngLatBounds();
         for (const point of points) bounds.extend([point.longitude, point.latitude]);
+        for (const route of snapshot.routes) {
+          for (const coordinate of route) bounds.extend(coordinate);
+        }
         map.fitBounds(bounds, { padding: 48, maxZoom: 14, duration: 0 });
       } else {
         resetCountry();
@@ -96,16 +99,36 @@
     previousSelection = snapshot.selected;
   }
 
+  function updateRoutes() {
+    const source = map?.getSource("tracks");
+    if (!source) return;
+    source.setData({
+      type: "FeatureCollection",
+      features: snapshot.routes.map((coordinates) => ({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates },
+      })),
+    });
+    document.body.dataset.routeCount = String(snapshot.routes.length);
+  }
+
   function accept(next) {
     if (!next || !Array.isArray(next.points)) return;
     snapshot = {
       points: next.points.filter(validPoint),
+      routes: Array.isArray(next.routes) ? next.routes.filter((route) =>
+        Array.isArray(route) && route.length >= 2 && route.every((coordinate) =>
+          Array.isArray(coordinate) && coordinate.length === 2 &&
+          Number.isFinite(coordinate[0]) && Math.abs(coordinate[0]) <= 180 &&
+          Number.isFinite(coordinate[1]) && Math.abs(coordinate[1]) <= 85)) : [],
       selected: next.selected,
       language: next.language === "en" ? "en" : "fa",
     };
     country.textContent = snapshot.language === "en" ? "Iran overview" : "نمای ایران";
     country.setAttribute("aria-label", snapshot.language === "en" ? "Show all of Iran" : "نمای سراسر ایران");
     updateMarkers();
+    updateRoutes();
   }
 
   function selectFromLink() {
@@ -153,8 +176,25 @@
               url: "pmtiles://" + archiveURL,
               attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <a href="https://protomaps.com/" target="_blank" rel="noopener noreferrer">Protomaps</a>',
             },
+            tracks: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
           },
-          layers: basemaps.layers("osm", basemaps.namedFlavor("light"), { lang: "fa" }),
+          layers: [
+            ...basemaps.layers("osm", basemaps.namedFlavor("light"), { lang: "fa" }),
+            {
+              id: "track-outline",
+              type: "line",
+              source: "tracks",
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: { "line-color": "#fff", "line-width": 7 },
+            },
+            {
+              id: "track-line",
+              type: "line",
+              source: "tracks",
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: { "line-color": "#285743", "line-width": 4 },
+            },
+          ],
         },
         locale: {
           "NavigationControl.ZoomIn": "بزرگ‌نمایی",
@@ -169,6 +209,7 @@
         document.body.dataset.mapState = "ready";
         country.hidden = false;
         notice.hidden = true;
+        updateRoutes();
       });
       map.on("idle", () => {
         document.body.dataset.mapZoom = String(map.getZoom().toFixed(2));

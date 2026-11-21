@@ -129,19 +129,24 @@ func (s *Server) createShift(w http.ResponseWriter, r *http.Request) error {
 		return forbidden()
 	}
 	var b struct {
-		CampaignID    string    `json:"campaign_id"`
-		LocationID    string    `json:"location_id"`
-		SupervisorID  string    `json:"supervisor_id"`
-		StartsAt      time.Time `json:"starts_at"`
-		EndsAt        time.Time `json:"ends_at"`
-		Target        int       `json:"target"`
-		RequiredStaff int       `json:"required_staff"`
-		Instructions  string    `json:"instructions"`
+		shiftHours
+		CampaignID    string `json:"campaign_id"`
+		LocationID    string `json:"location_id"`
+		SupervisorID  string `json:"supervisor_id"`
+		Target        int    `json:"target"`
+		RequiredStaff int    `json:"required_staff"`
+		Instructions  string `json:"instructions"`
 	}
 	if err := readJSON(w, r, &b); err != nil {
 		return err
 	}
-	if b.StartsAt.IsZero() || !b.EndsAt.After(b.StartsAt) || b.EndsAt.Sub(b.StartsAt) > 24*time.Hour || b.Target < 1 || b.Target > 100000000 || b.RequiredStaff < 1 || b.RequiredStaff > 100 {
+	if err := b.shiftHours.validate(); err != nil {
+		return err
+	}
+	if (b.BreakStartsAt != nil || b.BreakEndsAt != nil) && p.Role != "admin" {
+		return forbidden()
+	}
+	if b.Target < 1 || b.Target > 100000000 || b.RequiredStaff < 1 || b.RequiredStaff > 100 {
 		return bad("زمان، هدف و تعداد نیروی شیفت را بررسی کنید / Invalid shift schedule")
 	}
 	sid := id("shift")
@@ -153,14 +158,10 @@ func (s *Server) createShift(w http.ResponseWriter, r *http.Request) error {
 		if !ok {
 			return bad("سرپرست معتبر انتخاب کنید / Select an active supervisor")
 		}
-		var valid bool
-		if err := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=$1 AND status NOT IN('completed','paused') AND ($2::timestamptz AT TIME ZONE 'Asia/Tehran')::date>=start_date AND ($3::timestamptz AT TIME ZONE 'Asia/Tehran')::date<=end_date)", b.CampaignID, b.StartsAt, b.EndsAt).Scan(&valid); err != nil {
+		if err := checkCampaignHours(r.Context(), tx, b.CampaignID, b.shiftHours, false); err != nil {
 			return err
 		}
-		if !valid {
-			return bad("شیفت باید در بازه کمپین فعال یا برنامه‌ریزی‌شده باشد / Shift must fall within the campaign dates")
-		}
-		_, err := tx.Exec(r.Context(), "INSERT INTO shifts(id,campaign_id,location_id,supervisor_id,starts_at,ends_at,target,required_staff,instructions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", sid, b.CampaignID, b.LocationID, b.SupervisorID, b.StartsAt, b.EndsAt, b.Target, b.RequiredStaff, b.Instructions)
+		_, err := tx.Exec(r.Context(), "INSERT INTO shifts(id,campaign_id,location_id,supervisor_id,starts_at,ends_at,target,required_staff,instructions,break_starts_at,break_ends_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)", sid, b.CampaignID, b.LocationID, b.SupervisorID, b.StartsAt, b.EndsAt, b.Target, b.RequiredStaff, b.Instructions, b.BreakStartsAt, b.BreakEndsAt)
 		if err != nil {
 			return err
 		}
@@ -185,16 +186,19 @@ func (s *Server) assignPerson(w http.ResponseWriter, r *http.Request) error {
 	}
 	sid := r.PathValue("id")
 	err := s.transaction(r, func(tx pgx.Tx) error {
+		if err := lockRoster(r.Context(), tx); err != nil {
+			return err
+		}
 		var name string
 		if err := tx.QueryRow(r.Context(), "SELECT name FROM people WHERE id=$1 AND active AND role='sampler' FOR UPDATE", b.PersonID).Scan(&name); err != nil {
 			return err
 		}
-		var status string
+		var ended bool
 		var capacity int
-		if err := tx.QueryRow(r.Context(), "SELECT status,required_staff FROM shifts WHERE id=$1 FOR UPDATE", sid).Scan(&status, &capacity); err != nil {
+		if err := tx.QueryRow(r.Context(), "SELECT status='completed' OR ended_at IS NOT NULL OR ends_at<=clock_timestamp(),required_staff FROM shifts WHERE id=$1 FOR UPDATE", sid).Scan(&ended, &capacity); err != nil {
 			return err
 		}
-		if status == "completed" {
+		if ended {
 			return bad("شیفت پایان یافته است / Shift is completed")
 		}
 		if err := checkReportLock(r, tx, sid); err != nil {
@@ -208,7 +212,7 @@ func (s *Server) assignPerson(w http.ResponseWriter, r *http.Request) error {
 			return bad("ظرفیت شیفت تکمیل است / Shift is fully staffed")
 		}
 		var overlap bool
-		if err := tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM assignments a JOIN shifts s ON s.id=a.shift_id JOIN shifts target ON target.id=$2 WHERE a.person_id=$1 AND s.status!='completed' AND s.starts_at<target.ends_at AND s.ends_at>target.starts_at)`, b.PersonID, sid).Scan(&overlap); err != nil {
+		if err := tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM assignments a JOIN shifts s ON s.id=a.shift_id JOIN shifts target ON target.id=$2 WHERE a.person_id=$1 AND s.status!='completed' AND s.ended_at IS NULL AND s.starts_at<target.ends_at AND s.ends_at>target.starts_at)`, b.PersonID, sid).Scan(&overlap); err != nil {
 			return err
 		}
 		if overlap {

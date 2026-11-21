@@ -54,6 +54,7 @@ const states: Record<string, [string, string, string]> = {
   urgent: ["فوری", "Urgent", "rose"],
   present: ["حاضر", "Present", "green"],
   out: ["خروج ثبت‌شده", "Checked out", "neutral"],
+  auto_out: ["پایان خودکار", "Auto-closed", "neutral"],
 };
 export function Badge({ value }: { value: string }) {
   const { t } = useWorkspace();

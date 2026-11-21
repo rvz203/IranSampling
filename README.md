@@ -8,6 +8,8 @@ Open a campaign to see its shifts, team conversation, and operational history. A
 
 The panel and field app use the same self-hosted MapLibre map of Iran. OpenStreetMap vector tiles, fonts, icons and JavaScript are served by the Go API. See [Iran map setup](docs/iran-map.md) for the map data bundle and deployment.
 
+Administrators can edit a shift’s Tehran-time working hours, lunch break, supervisor, and sampler roster. The field app targets one recorded location every 30 seconds during working hours. Location recording pauses over lunch and resumes in the same session. Admins can review seven days of location history by shift and person. Go generates a closeout summary when the planned end is reached or an authorized user ends the shift. Open **Reports → Automatic summaries** to review the saved attendance and operating metrics. **Take a quick tour** in the sidebar walks through the workspace.
+
 The interface now uses a premium monochrome design, original FaraCode branding and imagery, and responsive operational workspaces. The requested Uber reference was inspected with the installed REA plugin. See [design decisions and visual verification](docs/premium-design.md) and the screenshots in `docs/screenshots`.
 
 All nine operational pages now include dedicated artwork and custom SVG icons, with campaign/location/profile/catalog cards, a shift date agenda, inventory breakdown, issue board and report review cards. See [operational page details, assets and checks](docs/operational-pages.md).

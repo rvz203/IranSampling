@@ -18,7 +18,9 @@ import {
   Navigation,
   Package,
   Plus,
+  Route,
   ShieldCheck,
+  Square,
   Users,
 } from "lucide-react";
 import { useWorkspace } from "./context";
@@ -36,6 +38,11 @@ import {
 import { EvidenceGallery } from "./dialogs";
 import { CampaignHistory, CampaignMessages } from "./campaign-records";
 import { mapLocationUrl } from "./iran-map";
+import {
+  ShiftSummaryPanel,
+  ShiftTrackingHistory,
+  ShiftWorkHours,
+} from "./shift-operations";
 
 export function ShiftDrawer({
   id,
@@ -65,6 +72,12 @@ export function ShiftDrawer({
     (a) => a.shift_id === id && a.person_id === data.user.id,
   );
   const report = data.reports.find((r) => r.shift_id === id);
+  const admin = data.user.role === "admin";
+  const leader =
+    data.user.role === "supervisor" && shift.supervisor_id === data.user.id;
+  const now = Date.parse(data.server_time);
+  const ended = !!shift.ended_at || shift.status === "completed";
+  const scheduledEnd = now >= Date.parse(shift.ends_at);
   const locked =
     shift.status === "completed" ||
     report?.status === "pending" ||
@@ -132,7 +145,7 @@ export function ShiftDrawer({
     >
       <div className="shift-drawer-hero">
         <span className={`brand-label ${shift.color}`}>{shift.brand_name}</span>
-        <Badge value={shift.status} />
+        <Badge value={ended ? "completed" : shift.status} />
         <div className="drawer-location">
           <MapPin size={17} />
           <span>
@@ -151,6 +164,27 @@ export function ShiftDrawer({
           {time(shift.starts_at)} – {time(shift.ends_at)}
         </div>
       </div>
+      <ShiftWorkHours shift={shift} />
+      {!ended && (
+        <div className="shift-schedule-actions">
+          {admin && !locked && !scheduledEnd && (
+            <Button
+              icon={Clock3}
+              onClick={() => open({ kind: "shift-schedule", id })}
+            >
+              {t("ویرایش برنامه و تیم", "Edit schedule and team")}
+            </Button>
+          )}
+          {(admin || leader) && now >= Date.parse(shift.starts_at) && (
+            <Button
+              icon={Square}
+              onClick={() => open({ kind: "shift-end", id })}
+            >
+              {t("پایان شیفت", "End shift")}
+            </Button>
+          )}
+        </div>
+      )}
       <div className="drawer-tabs">
         <button
           className={tab === "workspace" ? "active" : ""}
@@ -173,7 +207,16 @@ export function ShiftDrawer({
         >
           {t("تیم و حضور", "Team & attendance")}
         </button>
+        {admin && (
+          <button
+            className={tab === "history" ? "active" : ""}
+            onClick={() => setTab("history")}
+          >
+            <Route size={14} /> {t("تاریخچه موقعیت", "Location history")}
+          </button>
+        )}
       </div>
+      {tab === "history" && admin && <ShiftTrackingHistory shift={shift} />}
       {tab === "workspace" && (
         <>
           <div className="shift-detail-metrics">
@@ -221,7 +264,8 @@ export function ShiftDrawer({
             </div>
           </section>
           {mine &&
-            shift.status !== "completed" &&
+            !ended &&
+            (!scheduledEnd || !!attendance) &&
             (!locked || !!attendance) && (
               <div className="attendance-action">
                 {!attendance ? (
@@ -357,6 +401,7 @@ export function ShiftDrawer({
       )}
       {tab === "evidence" && (
         <>
+          {shift.ended_at && <ShiftSummaryPanel shiftId={id} />}
           <EvidenceGallery shiftId={id} />
           {shift.status !== "completed" && (
             <Button
@@ -424,7 +469,7 @@ export function ShiftDrawer({
                 {n(shift.team.length)} / {n(shift.required_staff)}
               </span>
             </h3>
-            {planner && !locked && (
+            {planner && !locked && !ended && !scheduledEnd && (
               <Button
                 icon={Plus}
                 disabled={shift.team.length >= shift.required_staff}
@@ -434,15 +479,15 @@ export function ShiftDrawer({
               </Button>
             )}
           </div>
-          <div className="team-person-row">
-            <Avatar name={shift.supervisor_name} />
-            <div>
-              <strong>{shift.supervisor_name}</strong>
-              <small>{t("سرپرست نقطه", "Point supervisor")}</small>
-            </div>
-            <span className="role-chip">{t("سرپرست", "Supervisor")}</span>
-          </div>
-          {shift.team.map((p) => {
+          {[
+            {
+              id: shift.supervisor_id,
+              name: shift.supervisor_name,
+              color: "",
+              role: "supervisor",
+            },
+            ...shift.team.map((p) => ({ ...p, role: "sampler" })),
+          ].map((p) => {
             const a = data.attendance.find(
               (a) => a.shift_id === id && a.person_id === p.id,
             );
@@ -452,16 +497,32 @@ export function ShiftDrawer({
                 <div>
                   <strong>{p.name}</strong>
                   <small>
+                    {p.role === "supervisor"
+                      ? t("سرپرست", "Supervisor")
+                      : t("سمپلر", "Sampler")}
                     {a
-                      ? time(a.checked_in_at) +
+                      ? " · " +
+                        time(a.checked_in_at) +
                         (a.checked_out_at ? " – " + time(a.checked_out_at) : "")
-                      : t("هنوز ورود ثبت نشده", "Not checked in yet")}
+                      : ""}
                   </small>
                 </div>
                 {a ? (
-                  <Badge value={a.checked_out_at ? "out" : "present"} />
+                  a.ended_automatically ? (
+                    <span className="role-chip">
+                      {t("پایان خودکار", "Auto-closed")}
+                    </span>
+                  ) : (
+                    <Badge value={a.checked_out_at ? "out" : "present"} />
+                  )
                 ) : (
-                  <span className="muted">{t("منتظر ورود", "Expected")}</span>
+                  (data.user.role !== "sampler" || p.id === data.user.id) && (
+                    <span className="muted">
+                      {ended
+                        ? t("حضور ثبت نشده", "No check-in")
+                        : t("منتظر ورود", "Expected")}
+                    </span>
+                  )
                 )}
               </div>
             );
@@ -690,7 +751,7 @@ export function CampaignDrawer({
                       {date(s.starts_at, { day: "numeric", month: "short" })}
                     </small>
                   </span>
-                  <Badge value={s.status} />
+                  <Badge value={s.ended_at ? "completed" : s.status} />
                   <Arrow size={15} />
                 </button>
               ))

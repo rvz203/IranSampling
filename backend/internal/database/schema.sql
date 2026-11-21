@@ -121,3 +121,21 @@ CREATE TABLE IF NOT EXISTS campaign_messages (
 );
 CREATE INDEX IF NOT EXISTS campaign_messages_feed_idx ON campaign_messages(campaign_id,id DESC);
 INSERT INTO schema_migrations(version) VALUES(3) ON CONFLICT DO NOTHING;
+
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS break_starts_at timestamptz;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS break_ends_at timestamptz;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS ended_at timestamptz;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS ended_automatically boolean NOT NULL DEFAULT false;
+DO $$ BEGIN
+ IF NOT EXISTS (SELECT FROM pg_constraint WHERE conrelid='shifts'::regclass AND conname='shift_break_in_work_window') THEN
+  ALTER TABLE shifts ADD CONSTRAINT shift_break_in_work_window CHECK (
+   (break_starts_at IS NULL AND break_ends_at IS NULL) OR
+   (break_starts_at IS NOT NULL AND break_ends_at IS NOT NULL AND
+    starts_at < break_starts_at AND break_starts_at < break_ends_at AND break_ends_at < ends_at));
+ END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS shifts_awaiting_close_idx ON shifts(ends_at) WHERE ended_at IS NULL;
+CREATE TABLE IF NOT EXISTS shift_summaries (
+ shift_id text PRIMARY KEY REFERENCES shifts(id), generated_at timestamptz NOT NULL DEFAULT now(), metrics jsonb NOT NULL
+);
+INSERT INTO schema_migrations(version) VALUES(4) ON CONFLICT DO NOTHING;

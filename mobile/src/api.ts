@@ -7,6 +7,7 @@ import type {
   Identity,
   LivePoint,
   Sample,
+  ShiftSummary,
   TrackingSession,
   User,
   Workspace,
@@ -143,6 +144,15 @@ export const fieldApi = {
     request<TrackingSession>(auth.origin, `/shifts/${shiftId}/tracking`, {
       token: auth.token,
       body: { consent: true },
+    }),
+  trackingSchedule: (auth: Identity, id: string) =>
+    request<TrackingSession>(auth.origin, `/tracking/${id}/schedule`, {
+      token: auth.token,
+      timeout: 2_500,
+    }),
+  shiftSummary: (auth: Identity, shiftId: string) =>
+    request<ShiftSummary>(auth.origin, `/shifts/${shiftId}/summary`, {
+      token: auth.token,
     }),
   stopTracking: (auth: Identity, id: string, stoppedAt: string) =>
     request(auth.origin, `/tracking/${id}/stop`, {

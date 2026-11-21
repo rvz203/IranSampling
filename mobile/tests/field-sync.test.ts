@@ -10,7 +10,12 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { LOCATION_PERIOD_MS, sampleForSession } from "../src/location-policy";
+import {
+  LOCATION_PERIOD_MS,
+  nextTrackingBoundary,
+  sampleForSession,
+  trackingPhase,
+} from "../src/location-policy";
 import {
   FIELD_DATABASE_SCHEMA,
   INSERT_OUTBOX,
@@ -150,6 +155,28 @@ test("one real fix per thirty second slot with clock correction and shift bounda
   );
 });
 
+test("scheduled lunch suppresses recording offline and resumes in the same session", () => {
+  const state = {
+    ...session,
+    work_starts_at: new Date(now - 40_000).toISOString(),
+    break_starts_at: new Date(now).toISOString(),
+    break_ends_at: new Date(now + 30_000).toISOString(),
+  };
+  const capture = (at: number) =>
+    sampleForSession(state, fix, at - state.clockOffset, now + 45_000);
+  assert.equal(trackingPhase(state, now - 50_000), "before_work");
+  assert.equal(trackingPhase(state, now), "break");
+  assert.equal(trackingPhase(state, now + 30_000), "working");
+  assert.equal(trackingPhase(state, now + 60_000), "ended");
+  assert.equal(nextTrackingBoundary(state, now), now + 28_000);
+  assert.equal(capture(now - 41_000), null);
+  assert.ok(capture(now - 1));
+  assert.equal(capture(now), null);
+  assert.equal(capture(now + 29_999), null);
+  assert.ok(capture(now + 30_000));
+  assert.equal(capture(now + 60_000), null);
+});
+
 const row = (id: string, payload: OutboxItem["payload"]): OutboxItem => ({
   id,
   shiftId: "shift",
@@ -213,6 +240,20 @@ function fixture() {
   };
   return { removed, failures, calls, transport, store };
 }
+
+test("an offline fix rejected because a lunch schedule changed is discarded", async () => {
+  const f = fixture();
+  const delivery = {
+    ...f.transport,
+    samples: async () => ({ results: ["stored", "break"] }),
+  };
+  assert.equal(
+    await deliverBatch(rows.slice(1, 3), delivery, f.store, now),
+    "done",
+  );
+  assert.deepEqual(f.removed, ["fix1", "fix2"]);
+  assert.deepEqual(f.failures, []);
+});
 
 test("offline replay preserves original order and removes only confirmed rows", async () => {
   const f = fixture();

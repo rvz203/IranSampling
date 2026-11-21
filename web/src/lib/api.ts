@@ -53,6 +53,16 @@ export function dayKey(date: string | Date): string {
   }).format(new Date(date));
 }
 
+export function tehranDateTimeField(value: string) {
+  const clock = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Tehran",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(value));
+  return `${dayKey(value)}T${clock}`;
+}
+
 export function tehranDateTimeToISO(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(
     value,

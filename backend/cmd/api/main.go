@@ -75,6 +75,22 @@ func main() {
 		os.Exit(1)
 	}
 	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			closeCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+			if err := server.FinalizeDueShifts(closeCtx); err != nil && ctx.Err() == nil {
+				slog.Error("shift closeout failed", "error", err)
+			}
+			cancel()
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	go func() {
 		ticker := time.NewTicker(time.Hour)
 		defer ticker.Stop()
 		for {

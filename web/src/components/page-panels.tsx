@@ -481,7 +481,7 @@ export function LocationCards({ rows }: { rows: Location[] }) {
     >
       {(l) => {
         const active = data.shifts.filter(
-          (s) => s.location_id === l.id && s.status === "active",
+          (s) => s.location_id === l.id && s.status === "active" && !s.ended_at,
         );
         return (
           <article className="location-card">

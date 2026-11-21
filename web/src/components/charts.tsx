@@ -230,7 +230,9 @@ export function OverviewStats({ days = 7 }: { days?: number }) {
       ? Math.round(((current - previous) / previous) * 100)
       : null;
   const activePoints = new Set(
-    data.shifts.filter((s) => s.status === "active").map((s) => s.location_id),
+    data.shifts
+      .filter((s) => s.status === "active" && !s.ended_at)
+      .map((s) => s.location_id),
   ).size;
   const pending = data.reports.filter((r) => r.status === "pending").length;
   const issues = data.issues.filter((i) => i.status !== "resolved").length;
@@ -258,7 +260,9 @@ export function OverviewStats({ days = 7 }: { days?: number }) {
       detail:
         n(
           new Set(
-            data.shifts.filter((s) => s.status === "active").map((s) => s.city),
+            data.shifts
+              .filter((s) => s.status === "active" && !s.ended_at)
+              .map((s) => s.city),
           ).size,
         ) +
         " " +
@@ -446,7 +450,7 @@ export function OperationsMap({
   const actualCity = cities.includes(city) ? city : cities[0];
   const locations = available.filter((l) => l.city === actualCity);
   const shifts = scope.filter(
-    (s) => s.status !== "completed" && s.city === actualCity,
+    (s) => s.status !== "completed" && !s.ended_at && s.city === actualCity,
   );
   function activate(id: string) {
     setSelected(id);

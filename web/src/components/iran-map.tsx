@@ -17,10 +17,12 @@ export function mapLocationUrl(latitude: number, longitude: number) {
 
 export function IranMap({
   points,
+  routes,
   selected,
   onSelect,
 }: {
   points: Point[];
+  routes?: [number, number][][];
   selected?: string | null;
   onSelect?: (id: string) => void;
 }) {
@@ -30,6 +32,7 @@ export function IranMap({
     type: "sampling-map:points",
     language: locale,
     points,
+    routes,
     selected,
   };
 

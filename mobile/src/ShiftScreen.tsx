@@ -5,6 +5,8 @@ import { fieldApi } from "./api";
 import { enqueuePhoto, pickPhoto } from "./photos";
 import { IranMap, IranMapDetail } from "./IranMap";
 import { attendanceFix } from "./tracking";
+import { trackingPhase } from "./location-policy";
+import { ShiftSummaryCard } from "./ShiftSummaryCard";
 import {
   Badge,
   Button,
@@ -71,8 +73,10 @@ export function ShiftCard({
       <View style={styles.row}>
         <Text style={[styles.name, { flex: 1 }]}>{shift.location_name}</Text>
         <Badge
-          label={shifts[shift.status]}
-          tone={shift.status === "active" ? "green" : "neutral"}
+          label={shift.ended_at ? "پایان‌یافته" : shifts[shift.status]}
+          tone={
+            !shift.ended_at && shift.status === "active" ? "green" : "neutral"
+          }
         />
       </View>
       <Text style={styles.muted}>{shift.campaign_name}</Text>
@@ -174,36 +178,67 @@ export function ShiftScreen({
   const sharing = track?.shift_id === shift.id;
   const pending = report?.status === "pending";
   const complete = shift.status === "completed";
+  const ended = !!shift.ended_at || complete;
   const locked = pending || complete;
   const issues = data.issues.filter((i) => i.shift_id === shift.id);
   const photos = data.evidence.filter((e) => e.shift_id === shift.id);
   const attendanceRows = data.attendance.filter((a) => a.shift_id === shift.id);
-  const now = Date.now();
+  const now = Date.now() + (sharing ? track.clockOffset : 0);
+  const phase = sharing ? trackingPhase(track, now) : null;
   const canArrive =
     now >= Date.parse(shift.starts_at) - 3_600_000 &&
-    now <= Date.parse(shift.ends_at) + 7_200_000;
+    now < Date.parse(shift.ends_at) &&
+    !ended;
 
-  const check = (action: "check-in" | "check-out") =>
+  const check = (action: "check-in" | "check-out", startSharing = false) =>
     run(action, async () => {
       const fix = await attendanceFix();
       await fieldApi.attendance(auth, shift.id, action, fix);
-      if (action === "check-out" && sharing) await stop().catch(() => {});
-      notice(
-        action === "check-in"
-          ? "ورود ثبت شد. در صورت نیاز، اشتراک موقعیت را فعال کنید."
-          : "خروج ثبت شد و اشتراک موقعیت پایان یافت.",
-      );
-      await refresh();
+      try {
+        if (startSharing) await share(shift.id);
+        if (action === "check-out" && sharing) await stop().catch(() => {});
+        notice(
+          action === "check-out"
+            ? "خروج ثبت شد و اشتراک موقعیت پایان یافت."
+            : startSharing
+              ? "ورود ثبت شد. برنامه کار و استراحت برای اشتراک اعمال می‌شود."
+              : "ورود ثبت شد. می‌توانید اشتراک موقعیت را از همین صفحه شروع کنید.",
+        );
+      } finally {
+        await refresh();
+      }
     });
-  const confirmShare = () =>
+  const sharingNotice =
+    "در ساعات کار، اپ حدود هر ۳۰ ثانیه موقعیت را برای ادمین و سرپرست همین شیفت ثبت می‌کند. در استراحت ثبت متوقف می‌شود و بعد خودکار ادامه می‌یابد. نمونه‌های آفلاین در صف می‌مانند.";
+  const confirmShare = (arrival = false) =>
+    Alert.alert("اشتراک موقعیت این شیفت", sharingNotice, [
+      { text: "انصراف", style: "cancel" },
+      ...(arrival
+        ? [{ text: "فقط ثبت ورود", onPress: () => check("check-in") }]
+        : []),
+      {
+        text: arrival ? "ورود و شروع اشتراک" : "شروع اشتراک",
+        onPress: () =>
+          arrival
+            ? check("check-in", true)
+            : run("share", () => share(shift.id)),
+      },
+    ]);
+  const confirmEnd = () =>
     Alert.alert(
-      "اشتراک موقعیت این شیفت",
-      "در طول این شیفت، اپ حدود هر ۳۰ ثانیه موقعیت دقیق را برای سرپرست همین شیفت و ادمین ثبت می‌کند. در حالت آفلاین، نمونه‌ها روی دستگاه صف می‌شوند. هر زمان می‌توانید اشتراک را متوقف کنید.",
+      "پایان شیفت",
+      "اشتراک موقعیت تیم پایان می‌یابد و خلاصه خودکار با اطلاعات ثبت‌شده ساخته می‌شود.",
       [
         { text: "انصراف", style: "cancel" },
         {
-          text: "شروع اشتراک",
-          onPress: () => run("share", () => share(shift.id)),
+          text: "پایان شیفت",
+          onPress: () =>
+            run("end", async () => {
+              await fieldApi.mutate(auth, `/shifts/${shift.id}/end`, {});
+              if (sharing) await stop().catch(() => {});
+              await refresh();
+              notice("شیفت پایان یافت و خلاصه خودکار ساخته شد.");
+            }),
         },
       ],
     );
@@ -214,8 +249,8 @@ export function ShiftScreen({
       <View style={local.shiftHeading}>
         <View style={styles.row}>
           <Badge
-            label={shifts[shift.status]}
-            tone={shift.status === "active" ? "green" : "neutral"}
+            label={ended ? "پایان‌یافته" : shifts[shift.status]}
+            tone={!ended && shift.status === "active" ? "green" : "neutral"}
           />
           <Text style={styles.muted}>{shift.brand_name}</Text>
         </View>
@@ -227,6 +262,15 @@ export function ShiftScreen({
           {day(shift.starts_at)} · {time(shift.starts_at)} تا{" "}
           {time(shift.ends_at)} به وقت تهران
         </Text>
+        {shift.break_starts_at && shift.break_ends_at ? (
+          <View style={local.breakRow}>
+            <Text style={styles.text}>استراحت ناهار</Text>
+            <Text style={styles.muted}>
+              {time(shift.break_starts_at)} تا {time(shift.break_ends_at)} ·
+              توقف ثبت موقعیت
+            </Text>
+          </View>
+        ) : null}
         {shift.address ? (
           <Text style={styles.muted}>{shift.address}</Text>
         ) : null}
@@ -253,15 +297,25 @@ export function ShiftScreen({
           <Card>
             <View style={styles.row}>
               <Text style={styles.name}>
-                {attendance?.checked_out_at
-                  ? "ورود و خروج ثبت شده"
-                  : present
-                    ? "در محل شیفت ثبت شده‌اید"
-                    : "حضور ثبت نشده"}
+                {attendance?.ended_automatically
+                  ? "حضور با پایان شیفت بسته شد"
+                  : attendance?.checked_out_at
+                    ? "ورود و خروج ثبت شده"
+                    : present
+                      ? "در محل شیفت ثبت شده‌اید"
+                      : "حضور ثبت نشده"}
               </Text>
               <Badge
-                label={sharing ? "اشتراک فعال" : "بدون اشتراک"}
-                tone={sharing ? "green" : "neutral"}
+                label={
+                  phase === "break"
+                    ? "استراحت"
+                    : phase === "before_work"
+                      ? "پیش از شروع کار"
+                      : phase === "working"
+                        ? "اشتراک فعال"
+                        : "بدون اشتراک"
+                }
+                tone={phase === "working" ? "green" : "neutral"}
               />
             </View>
             {present ? (
@@ -269,7 +323,7 @@ export function ShiftScreen({
                 ورود {time(attendance.checked_in_at)}
               </Text>
             ) : null}
-            {!attendance && !locked && (
+            {!attendance && !locked && !ended && (
               <Button
                 testID="check-in"
                 label="ثبت ورود با GPS"
@@ -277,23 +331,27 @@ export function ShiftScreen({
                 variant="dark"
                 busy={busy === "check-in"}
                 disabled={!online || !canArrive || !!busy}
-                onPress={() => check("check-in")}
+                onPress={() => confirmShare(true)}
               />
             )}
-            {!attendance && !locked && !canArrive && (
+            {!attendance && !locked && !ended && !canArrive && (
               <Text style={styles.muted}>
                 ثبت ورود در بازه مجاز شیفت فعال می‌شود.
               </Text>
             )}
-            {present && !complete && (
+            {present && !ended && (
               <>
                 {sharing ? (
                   <>
                     <Notice
                       message={
-                        track.background
-                          ? "موقعیت در پس‌زمینه هم ثبت می‌شود. در قطع اینترنت، نمونه‌ها در صف باقی می‌مانند."
-                          : "موقعیت فقط هنگام باز بودن اپ ثبت می‌شود. برای اشتراک در پس‌زمینه، دسترسی همیشگی مکان را در تنظیمات دستگاه فعال کنید و اشتراک را دوباره شروع کنید."
+                        phase === "break"
+                          ? "ثبت موقعیت در زمان ناهار متوقف است و پس از استراحت خودکار ادامه می‌یابد."
+                          : phase === "before_work"
+                            ? "ثبت موقعیت هنگام شروع ساعات کار آغاز می‌شود."
+                            : track.background
+                              ? "موقعیت در پس‌زمینه هم ثبت می‌شود. در قطع اینترنت، نمونه‌ها در صف باقی می‌مانند."
+                              : "موقعیت فقط هنگام باز بودن اپ ثبت می‌شود. برای اشتراک در پس‌زمینه، دسترسی همیشگی مکان را در تنظیمات دستگاه فعال کنید و اشتراک را دوباره شروع کنید."
                       }
                     />
                     <Button
@@ -318,7 +376,7 @@ export function ShiftScreen({
                       !!busy ||
                       now >= Date.parse(shift.ends_at)
                     }
-                    onPress={confirmShare}
+                    onPress={() => confirmShare()}
                   />
                 )}
                 <Button
@@ -438,11 +496,13 @@ export function ShiftScreen({
                 {(supervisor || person.id === auth.user.id) && (
                   <Badge
                     label={
-                      a?.checked_out_at
-                        ? "خروج ثبت شده"
-                        : a
-                          ? "حاضر"
-                          : "در انتظار ورود"
+                      a?.ended_automatically
+                        ? "پایان خودکار حضور"
+                        : a?.checked_out_at
+                          ? "خروج ثبت شده"
+                          : a
+                            ? "حاضر"
+                            : "در انتظار ورود"
                     }
                     tone={a && !a.checked_out_at ? "green" : "neutral"}
                   />
@@ -533,6 +593,9 @@ export function ShiftScreen({
         )}
       </Section>
       <Section title="گزارش پایان شیفت">
+        {shift.ended_at && (
+          <ShiftSummaryCard auth={auth} shiftId={shift.id} online={online} />
+        )}
         <Card>
           {report ? (
             <>
@@ -547,6 +610,15 @@ export function ShiftScreen({
             <Text style={styles.muted}>
               بعد از ثبت عکس و خروج اعضای تیم، گزارش را ارسال کنید.
             </Text>
+          )}
+          {supervisor && !ended && now >= Date.parse(shift.starts_at) && (
+            <Button
+              label="پایان شیفت"
+              icon="stop-circle-outline"
+              onPress={confirmEnd}
+              disabled={!online || !!busy}
+              busy={busy === "end"}
+            />
           )}
           {supervisor && pending && (
             <Button
@@ -791,6 +863,12 @@ const local = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: colors.line,
     marginVertical: 5,
+  },
+  breakRow: {
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: "#f7f6ed",
+    gap: 3,
   },
   link: { color: colors.green, fontWeight: "700", fontSize: 12 },
   metrics: { flexDirection: "row-reverse", gap: 8 },
